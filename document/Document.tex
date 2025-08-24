@@ -76,143 +76,154 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %     			TITLE, AUTHORS AND DATE    			  %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Title, authors and date
 
-\title{Tesis PEG Template }
+\title{\textbf{Problem Set 1 --- Solution (Team 4)}\\
+\large Machine Learning and Big Data, School of Economics, Universidad de los Andes}
 
-\author{Ignacio Sarmiento-Barbieri } 
-\date{\today}
+\author{Juan Jos\'e Rojas}
+\author{Francisco Soler}
+\author{Alice Placeholder}
+\author{Bob Placeholder}
+\date{}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%          				  DOCUMENT       					      %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 \begin{document}
-
-
-
 \maketitle
+\thispagestyle{empty}
+\onehalfspacing
 
-\thispagestyle{empty} % Leaves first page without page number
+\section{Introduction}
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%          			  ABSTRACT       					      %
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+The main objective is to construct a model of individual hourly wages
+\begin{equation}
+w = f(X) + u
+\end{equation}
+where $w$ is the hourly wage, and $X$ is a matrix that includes potential explanatory variables/predictors. In this problem set, we will focus on $f(X)=X\beta$.
 
+The document must contain the following sections:
 
+\begin{enumerate}[1.]
+  \item \textbf{Introduction.} The introduction states the problem and any antecedents. It briefly describes the data and its suitability to address the problem set question. It contains a preview of the results and main takeaways. Keep this section up to 5 paragraphs.
 
-
-\begin{abstract}
-%100-word Abstract
-\noindent %
-
-\end{abstract}
-
-
-
-
-% Keywords and JEL Classification
-\medskip
-
-\begin{flushleft}
-	{\bf Key words: } 				\\
-	{\bf JEL Classification: }
-\end{flushleft}
-
-% Ends title page and defines spacing for the rest of the document
-\pagebreak
-\doublespacing
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%    DOCUMENT    		          %
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-
-
-
-\section{Introduction} \label{sec:intro}
-
-Here you have to position your paper, remember RAP:
-\begin{enumerate}
-    \item R: research question
-    \item A: your answer
-    \item P: positioning in the existing literature
+  \item \textbf{Data.}\footnote{This section is located here so the reader can understand your work, but probably it should be the last section you write. Why? Because you are going to make data choices in the estimated models. And all variables included in these models should be described here.} We will use data for Bogotá from the 2018 ``\emph{Medición de Pobreza Monetaria y Desigualdad Report}'' that takes information from the \href{https://www.dane.gov.co/}{GEIH}.
 \end{enumerate}
 
-\section{Literature Review}
+\medskip
 
-A couple of things here. First, I prefer not to have a separate section, I think it's better to have it as part of the introduction, where you can cite the papers to position yours, and also in contrasting your contribution. You can also fold this when discussion your results, so you can compare/contrast with the existing literature
+\noindent The data set contains all individuals sampled in Bogota and is available at the following website \href{https://ignaciosarmiento.github.io/GEIH2018_sample/}{https://ignaciosarmiento.github.io/GEIH2018\_sample/}. To obtain the data, you must scrape the website.
 
+The focus of this problem set is on employed individuals older than eighteen (18) years old. Restrict the data to these individuals and perform a descriptive analysis of the variables used in the problem set. Keep in mind that in the data, there are many observations with missing data or 0 wages. I leave it to you to find a way to handle these data.
 
-If you decide to have a separate section, please be careful in relating it to your research. I encurage you to read and follow \cite{nikolov2020writing}\footnote{This is available in the \href{https://ignaciomsarmiento.github.io/teaching/Tesis.html}{course website}} excellent advice:
-
-\begin{quote}
-    {\it ``Do not title your literature review section ``literature review''! It is a bit sophomoric. Instead, integrate your discussion of previous literature under the common thread of previous work as it relates to your main thesis.  For example if your paper is ``Do Traditional Institutions Constrain Female Entrepreneurship?'' you might want to call your literature review ``Gender norms in India''. In other words, tell your readers what is in the section...''} \citep{nikolov2020writing}
-\end{quote}
-
-
+When writing this section up, you must:
+\begin{enumerate}[(a)]
+  \item Describe the data briefly, including its purpose, and any other relevant information.
+  \item Describe the process of acquiring the data and if there are any restrictions to accessing/scraping these data.
+  \item Describe the data cleaning process and
+  \item Descriptive the variables included in your analysis. At a minimum, you should include a descriptive statistics table with its interpretation. However, I expect a deep analysis that helps the reader understand the data, its variation, and the justification for your data choices. Use your professional knowledge to add value to this section. Do not present it as a ``dry'' list of ingredients.
+\end{enumerate}
 
 \section{Data}
 
-\section{Identification}
+We will use data for Bogotá from the 2018 ``\emph{Medición de Pobreza Monetaria y Desigualdad Report}'' that takes information from the \href{https://www.dane.gov.co/}{GEIH}. The data set contains all individuals sampled in Bogota and is available at the following website \href{https://ignaciosarmiento.github.io/GEIH2018_sample/}{https://ignaciosarmiento.github.io/GEIH2018\_sample/}. To obtain the data, you must scrape the website.
 
-Writing equations is also quite easy: 
+The focus of this problem set is on employed individuals older than eighteen (18) years old. Restrict the data to these individuals and perform a descriptive analysis of the variables used in the problem set. Keep in mind that in the data, there are many observations with missing data or 0 wages. I leave it to you to find a way to handle these data.
 
+When writing this section up, you must:
+\begin{enumerate}[(a)]
+  \item Describe the data briefly, including its purpose, and any other relevant information.
+  \item Describe the process of acquiring the data and if there are any restrictions to accessing/scraping these data.
+  \item Describe the data cleaning process and
+  \item Descriptive the variables included in your analysis. At a minimum, you should include a descriptive statistics table with its interpretation. However, I expect a deep analysis that helps the reader understand the data, its variation, and the justification for your data choices. Use your professional knowledge to add value to this section. Do not present it as a ``dry'' list of ingredients.
+\end{enumerate}
+
+\section{Age-wage profile}
+
+A great deal of evidence in \emph{labor economics} suggests that the typical worker's age-wage profile has a predictable path: ``Wages tend to be low when the worker is young; they rise as the worker ages, peaking at about age 50; and the wage rate tends to remain stable or decline slightly after age 50.''
+
+In this subsection we are going to estimate the \emph{Age-wage profile} for the individuals in this sample:
 \begin{equation}
-\label{eq:ols}
-    \hat{\beta}= (X'X)^{-1}X'y
+\log(w) = \beta_1 + \beta_2 \,\text{Age} + \beta_3 \,\text{Age}^2 + u
 \end{equation}
 
-Equation \eqref{eq:ols} shows ...
+When presenting and discussing your results, include:
+\begin{itemize}
+  \item A regression table.
+  \item An interpretation of the coefficients and its significance.
+  \item A discussion of the model's in sample fit.
+  \item A plot of the estimated age-earnings profile implied by the above equation. (Including a discussion of the ``peak age'' with its respective confidence intervals. \textit{Note: Use bootstrap to construct the confidence intervals}.)
+\end{itemize}
 
-\section{Results}
+\section{The gender earnings GAP}
 
-Referencing tables is very easy you can do the following: In Table \ref{tab:avdiscriminationrates} ...
+Policymakers have long been concerned with the gender wage gap, and is going to be our focus in this subsection.
 
-Citing papers is easier, for example \cite{albouy2020unlocking} shows that crime around parks. For many papers in parenthesis \cite{albouy2020unlocking,mcmillen2019more} 
+\begin{enumerate}[(a)]
+  \item Begin by estimating and discussing the unconditional wage gap:
+  \begin{equation}
+  \log(w) = \beta_1 + \beta_2 \,\text{Female} + u
+  \end{equation}
+  where \textit{Female} is an indicator that takes one if the individual in the sample is identified as female.
 
-\subsection{Robustness}
-\section{Conclusion}
+  \item \textit{Equal Pay for Equal Work?} A common slogan is ``equal pay for equal work''. One way to interpret this is that for employees with similar worker and job characteristics, no gender wage gap should exist. Estimate a conditional earnings gap incorporating control variables such as similar worker and job characteristics. That is estimate an equation of the form
+  \begin{equation}
+  \log(w) = \beta_1 + \beta_2 \,\text{Female} + \theta X + u
+  \end{equation}
+  where $X$ is the vector of worker and job characteristics. Think deeply on the role of controls. When estimating the equation do it:
+  \begin{enumerate}[i.]
+    \item First, using FWL
+    \item Second, using FWL with bootstrap. Compare the estimates and the standard errors.
+  \end{enumerate}
 
+  \item Next, plot the predicted age-wage profile and estimate the implied ``peak ages'' with the respective confidence intervals by gender.
+\end{enumerate}
 
+When presenting and discussing your results, include:
+\begin{itemize}
+  \item An estimating equation, explaining the included control variables (beware of ``bad controls'').
+  \item A regression table, with the estimates side by side of the conditional and unconditional wage gaps, highlighting the coefficient of interest. Controls, should not be included in the table but dutifully noted.\footnote{Tip: Look how applied papers construct their results tables. These papers usually present comparable results in the same table with coefficients side by side, which helps the reader follow the discussion.}
+  \item An interpretation of the ``Female'' coefficients, a comparison between the models, and the in-sample fit.
+  \item A discussion about the implied peak ages and their statistical similarity/difference.
+  \item A thoughtful discussion about the unconditional and conditional wage gap, seeking to answer if the changes in the coefficient are evidence of a selection problem, a ``discrimination problem,'' a mix, or none of these issues.
+\end{itemize}
 
+\section{Predicting wages}
 
+In the previous sections, you estimated some specifications with inference in mind. In this subsection, we will evaluate the predictive power of these specifications.
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%		  References				  %
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{enumerate}[(a)]
+  \item Split the sample into two: a training (70\%) and a testing (30\%) sample. (Use the seed 10101 to achieve reproducibility.)
+  \item Report and compare the predictive performance in terms of the RMSE of all the previous specifications with at least five (5) additional specifications that explore non-linearities and complexity.
+  \item In your discussion of the results, comment:
+  \begin{enumerate}[i.]
+    \item About the overall performance of the models.
+    \item About the specification with the lowest prediction error.
+    \item For the specification with the lowest prediction error, explore those observations that seem to ``miss the mark.'' To do so, compute the prediction errors in the test sample, and examine its distribution. Are there any observations in the tails of the prediction error distribution? Are these outliers potential people that the DIAN should look into, or are they just the product of a flawed model?
+  \end{enumerate}
+  \item \textbf{LOOCV.} For the two models with the lowest predictive error in the previous section, calculate the predictive error using Leave-one-out-cross-validation (LOOCV). Compare the results of the test error with those obtained with the hold-out set approach and explore the potential wins like the influence statistics. (\textit{Note: Some implementations and computations within this subsection take time, depending on your coding skills, plan accordingly!})
+\end{enumerate}
 
-\pagebreak
-\singlespacing
-\bibliography{References.bib}
-\pagebreak
+\section{Additional Guidelines}
 
+\begin{itemize}
+  \item \textbf{Document.} Submit a .pdf document in Brightspace under the activity `Problem Set 1: Predicting Income'.
+  \item \textbf{Slides for in-class presentation:} In addition to the .pdf document, each team must prepare four sets of slides (one for each section of the problem set, omitting the introduction) to present in class. These must be uploaded to the activity `Slides: PS1' in Brightspace.
+  \begin{itemize}
+    \item File name format: \texttt{nombre\_equipo\_\#\#} (use leading zero for teams numbered below 10). Example for team 1:
+    \begin{itemize}
+      \item \texttt{data\_equipo\_01} (Data)
+      \item \texttt{age\_equipo\_01} (Age-wage profile)
+      \item \texttt{gap\_equipo\_01} (Equal Pay for Equal Work?)
+      \item \texttt{pred\_equipo\_01} (Predicting wages)
+    \end{itemize}
+    \item Respect these file names exactly.
+    \item Maximum 10 minutes per presentation (approximately 3 slides).
+  \end{itemize}
+\end{itemize}
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%		  TABLES				  %
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section*{Tables and Figures}
-
-
-\input{../views/av_discrimination}%
-
-\pagebreak
-
-\begin{figure}[H]
-\caption{US Map} \label{fig:robust}
-    \includegraphics[scale=0.75]{../views/fig1a.pdf}   
- \flushleft
- Note: This figure shows ...
-\end{figure}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%   APPENDIX	 Tables	        %
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\pagebreak
-\appendix
-\renewcommand{\theequation}{\Alph{chapter}.\arabic{equation}}
-
-\setcounter{figure}{0}
-\setcounter{table}{0}
-\makeatletter 
-\renewcommand{\thefigure}{A.\@arabic\c@figure}
-\renewcommand{\thetable}{A.\@arabic\c@table}
-
-\section{Appendix: Tables and Figures}\label{sec:appendix_tables} 
+\bigskip
+\noindent\textit{Note.} A general reference on tax administration gaps (not required here, but cited in the original document) is available at: \href{https://www.irs.gov/newsroom/the-tax-gap}{https://www.irs.gov/newsroom/the-tax-gap}.
 
 \end{document}
