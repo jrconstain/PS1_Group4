@@ -84,4 +84,24 @@ head(db_miss, 3)
 #Solamente el salario secundario cuenta con missing values.
 vis_dat(db_clean)
 
+#Validar outliers en horas
+low <- mean(db_clean$totalHoursWorked) - 2 * sd(db_clean$totalHoursWorked)
+up <- mean(db_clean$totalHoursWorked) + 2 * sd(db_clean$totalHoursWorked)
 
+db_clean <- db_clean %>% 
+  mutate(out_totalHoursWorked = ifelse(test = (totalHoursWorked < low | totalHoursWorked > up), 
+                                       yes = 1,
+                                       no = 0))
+db_outliers <- db_clean %>% 
+  filter(out_totalHoursWorked==1)
+
+#Validar outliers en ingreso
+low_y <- mean(db_clean$Total_salary) - 2 * sd(db_clean$Total_salary)
+up_y <- mean(db_clean$Total_salary) + 2 * sd(db_clean$Total_salary)
+
+db_clean <- db_clean %>% 
+  mutate(out_Total_salary = ifelse(test = (Total_salary < low_y | Total_salary > up_y), 
+                                       yes = 1,
+                                       no = 0))
+db_outliersy <- db_clean %>% 
+  filter(out_Total_salary==1)
