@@ -1,0 +1,127 @@
+---
+title: "Age-wage profile"
+author: "Jesús Yancy - Juan Otalora"
+date: "2025-09-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Set working directory
+username <- Sys.getenv("USER")
+
+if (username == "jesusyancy"){
+  path <- "/Users/jesusyancy/Documents/MECA/BDML/TALLERES/TALLER 1"
+} else if(username == ''){
+  path <- ""
+}
+setwd(path)
+```
+
+```{r}
+library(pacman)
+```
+
+```{r}
+# Instalar paquetes
+p_load(rio, # import/export data
+       tidyverse, # tidy-data
+       skimr, # summary data
+       visdat, # visualizing missing data
+       corrplot, # Correlation Plots 
+       stargazer) # tables/output to TEX.
+```
+
+```{r}
+df <- import("https://raw.githubusercontent.com/jrconstain/PS1_Group4/refs/heads/main/data/db_clean.csv?token=GHSAT0AAAAAADJKTLBWNZEE4QWOPOKJOABY2FZWN6Q")
+```
+
+## 3. Age-wage profile. 
+
+A great deal of evidence in labor economics suggests that the typical worker’s age-wage profile has a predictable path: “Wages tend to be low when the worker is young; they rise as the worker ages, peaking at about age 50; and the wage rate tends to remain stable or decline slightly after age 50”.
+
+In this subsection we are going to estimate the Age-wage profile profile for the individuals in this sample:
+
+$$ log(w) = β_1 + β_2Age+ β_3Age^2 + u $$
+
+```{r}
+df <- df %>%
+  mutate(age2 = age^2)
+```
+
+```{r}
+model_age <- lm(Log_Total_hour_salary ~ age + age2, data = df)
+
+stargazer(model_age, type = "text")
+```
+
+Peak age
+
+```{r}
+# Extraer coeficientes
+coefs <- coef(model_age)
+b2 <- coefs["age"]
+b3 <- coefs["age2"]
+
+peak_age <- -b2 / (2 * b3)
+peak_age
+
+peak_salary <- coefs["(Intercept)"] + b2*peak_age + b3*peak_age^2
+exp(peak_salary)
+
+```
+
+
+```{r}
+library(ggplot2)
+
+# Coeficientes del modelo original
+coefs <- coef(model_age)
+b1 <- coefs["(Intercept)"]
+b2 <- coefs["age"]
+b3 <- coefs["age2"]
+
+# Peak age estimado
+peak_age <- -b2 / (2 * b3)
+peak_salary <- b1 + b2*peak_age + b3*peak_age^2
+
+# Crear un rango de edades para graficar la curva
+age_seq <- seq(min(df$age, na.rm = TRUE), max(df$age, na.rm = TRUE), length.out = 200)
+pred_salary <- b1 + b2*age_seq + b3*age_seq^2
+
+# Dataframe para graficar
+plot_data <- data.frame(age = age_seq, salary = pred_salary)
+
+# Gráfico
+ggplot(plot_data, aes(x = age, y = salary)) +
+  geom_line(color = "blue", linewidth = 1) +
+  geom_point(aes(x = peak_age, y = peak_salary), color = "red", size = 3) +
+  geom_vline(xintercept = peak_age, linetype = "dashed", color = "red") +
+  labs(
+    title = "Curva cuadrática de salario horario vs. edad",
+    subtitle = paste0("Peak age ≈ ", round(peak_age, 1), " años"),
+    x = "Edad",
+    y = "Salario horario (log o nivel)"
+  ) +
+  theme_minimal()
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
