@@ -105,3 +105,9 @@ db_clean <- db_clean %>%
                                        no = 0))
 db_outliersy <- db_clean %>% 
   filter(out_Total_salary==1)
+
+#Código Leverage
+db_int <- db_int %>% mutate(leverage = hatvalues(linear_model))
+
+## residuals
+db_int <- db_int %>% mutate(residuals = linear_model$residuals)
