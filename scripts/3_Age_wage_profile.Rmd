@@ -36,7 +36,7 @@ p_load(rio, # import/export data
 ```
 
 ```{r}
-df <- import("https://raw.githubusercontent.com/jrconstain/PS1_Group4/refs/heads/main/data/db_clean.csv?token=GHSAT0AAAAAADJKTLBWNZEE4QWOPOKJOABY2FZWN6Q")
+df <- read_csv("db_clean.csv")
 ```
 
 ## 3. Age-wage profile. 
@@ -110,6 +110,31 @@ ggplot(plot_data, aes(x = age, y = salary)) +
 
 ```
 
+## Calcular los intervalos de confianza del peak age con bootstrap
+
+```{r}
+# Se define la función que recibe los datos y un vector de índices que boot genera en cada subset de la muestra con reemplazo.
+# La función devuelve el peak age para cada subset.
+peak_fn <- function(data, index) {
+  fit <- lm(Log_Total_hour_salary ~ age + age2, data = data, subset = index) # Estima el modelo con cada subset
+  coefs <- coef(fit)
+  -coefs["age"] / (2 * coefs["age2"]) # Calcular el peak age de cada subset
+}
+
+# Se prueba en la muestra original
+peak_fn(df, 1:nrow(df))
+
+# bootstrap con 1000 réplicas
+set.seed(123)
+boot_out <- boot(df, statistic = peak_fn, R = 1000)
+
+# resultados
+boot_out$t0          # peak age de la muestra original
+boot_out             # resumen del bootstrap
+
+# intervalos de confianza
+boot.ci(boot_out, type = "perc")
+```
 
 
 
