@@ -1,0 +1,60 @@
+---
+title: "PS1_G4_predict"
+author: "G4"
+date: "2025-09-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(here)
+library(readr)
+
+ruta <- here("data", "db_clean1.csv")
+df <- read_csv(ruta)
+```
+
+```{r}
+library(pacman)
+
+# Instalar paquetes
+p_load(rio, # import/export data
+       tidyverse, # tidy-data
+       skimr, # summary data
+       visdat, # visualizing missing data
+       corrplot, # Correlation Plots 
+       stargazer) # tables/output to TEX.
+```
+
+```{r}
+library(caret)
+```
+
+```{r}
+df <- df %>%
+  mutate(age2 = age^2)
+```
+
+```{r}
+
+# 2) split estratificado 70/30, semilla pedida
+set.seed(10101)
+inTrain <- createDataPartition(y = df$Log_Total_hour_salary, p = 0.70, list = FALSE)
+
+# 3) arma train / test con indexado por filas (mejor que row_number())
+train <- df[inTrain, ]
+test  <- df[-inTrain, ]
+
+# chequeo rápido
+c(n_train = nrow(train), n_test = nrow(test), prop_train = nrow(train)/nrow(df))
+```
+
+```{r}
+
+```
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
