@@ -1,0 +1,99 @@
+---
+title: "gender-earnings-gap"
+author: "Juan José Rojas & Francisco Soler"
+date: "2025-09-04"
+output: html_document
+---
+
+```{r}
+install.packages("pacman")
+library(pacman)
+
+p_load(rio, # Import/export data.
+       tidyverse, # Tidy-data.
+       stargazer, # Descriptive statistics.
+       gt, # Descriptive statistics.
+       gtsummary,
+       caret, # For predictive model assessment.
+       gridExtra, # Arrange plots.
+       skimr # Summarize data.
+       )
+```
+
+# Database load
+
+```{r}
+# Working directory setting
+username <- Sys.getenv("USERNAME")
+# Dynamic filepath
+ruta_datos <- file.path("C:/Users", username, "Documents",
+                        "MEcA - Uniandes/2025-2/Big Data y Machine Learning/PS1_Group4/data")
+# Load original database                  
+db<- read_csv(file.path(ruta_datos, "db_clean1.csv"))
+dim(db) # database dimensions
+```
+
+# Unconditional Gender-Wage GAP
+
+$$ log(w) = β_1 + β_2Female + u $$
+
+```{r}
+# Create indicator of female
+db <- db |>
+  mutate(bin_female = 1 - sex)
+db$bin_female <- factor(db$bin_female)
+
+# Run the model 
+model_sex <- lm(Log_Total_hour_salary ~ bin_female, data = db)
+# View the coefficients
+stargazer(model_sex, type = "text")
+
+```
+
+The unconditional regression indicates that women earn, on average, about 4.7 percent less per hour than men. This gap is estimated without controlling for any observable characteristics, so it reflects the raw difference in average hourly wages between the two groups. In other words, the coefficient captures the unconditional gender wage gap in log-wage terms.
+
+# Equal Pay for Equal Work?
+
+We need to control for: - Similar worker characteristics: Education (edu years, max level, college), age or experience.
+
+-   Similar job characteristics: formality (formal), size of the business (sizeFirm, microEmpresa), occupation (oficio, relab)
+
+$$ log(w) = \beta_1 + \beta_2Female + \beta_3Education + \beta_4Age + \beta_5Age^2 + \beta_5Formality + \beta_6Business Size + \gamma_1Oficio + u $$
+
+$$ log(w) = \beta_1 + \beta_2Female + \beta_3Education + \beta_4Experience + \beta_5Age^2 + \beta_5 + u $$
+
+```{r}
+db <- db %>%
+  mutate(age2 = age^2)
+
+db$oficio <- factor(db$oficio)
+db$formal <- factor(db$formal)
+db$microEmpresa <- factor(db$microEmpresa)
+db$relab <- factor(db$relab)
+  
+# Individual characteristics (edu_years + age + age2)
+model_equality1 <- lm(Log_Total_hour_salary ~ bin_female + edu_years + age + age2, data = db)
+
+# Individual + Firm nature
+model_equality2 <- lm(Log_Total_hour_salary ~ bin_female + edu_years + age + age2 + formal +  sizeFirm + relab, data = db)
+
+# Individual + Firm nature + occupation
+model_equality3 <- lm(Log_Total_hour_salary ~ bin_female + edu_years + age + age2 + formal +  sizeFirm + relab + oficio, data = db)
+
+
+# View the coefficients
+stargazer(model_sex, model_equality1, model_equality2, model_equality3, type = "text", out = "tabla_modelo.txt")
+
+```
+
+```{r}
+db %>%
+  mutate(sex = factor(sex, levels = c(1,0), labels = c("Men","Women"))) %>%
+  select(sex, edu_years, Log_Total_hour_salary, age) %>%
+  tbl_summary(by = sex,
+              statistic = all_continuous() ~ "{mean} ({sd})",
+              digits = all_continuous() ~ 2) %>%
+  add_n() %>%           # agrega N por grupo
+  add_p()               # prueba de diferencia (opcional)
+
+```

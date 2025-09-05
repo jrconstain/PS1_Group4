@@ -255,7 +255,6 @@ stargazer(as.data.frame(db[,dem_vars]), type="text")
 ```
 
 ```{r}
-
 g_ocu <- graficar_variables(db, ocu_vars, "Job characteristics")
 print(g_ocu$histogramas)
 print(g_ocu$boxplots)
@@ -263,7 +262,11 @@ stargazer(as.data.frame(db[,ocu_vars]), type="text")
 ```
 
 ```{r}
-db_clean = db %>% select(ingtot, y_ingLab_m, y_salary_m, y_salarySec_m, y_ingLab_m_ha, y_salary_m_hu, y_salarySec_m_ha, totalHoursWorked, hoursWorkUsual, hoursWorkActualSecondJob, age, sex, estrato1, maxEducLevel, college, edu_years, exp, oficio, relab, formal, regSalud, sizeFirm, p6240, ocu, dsi)
 
-write.csv(db, "db_clean.csv", row.names = FALSE)
+db <- db|>
+  mutate(Log_Total_hour_salary=log(db$y_ingLab_m_ha))
+
+db_clean = db %>% select(Log_Total_hour_salary, ingtot, y_ingLab_m, y_salary_m, y_salarySec_m, y_ingLab_m_ha, y_salary_m_hu, y_salarySec_m_ha, totalHoursWorked, hoursWorkUsual, hoursWorkActualSecondJob, age, sex, estrato1, maxEducLevel, college, edu_years, exp, oficio, relab, formal, microEmpresa, regSalud, sizeFirm, p6240, ocu, dsi)
+
+write.csv(db_clean, file.path(ruta_datos, "db_clean1.csv"), row.names = FALSE)
 ```
