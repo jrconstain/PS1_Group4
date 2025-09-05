@@ -40,15 +40,15 @@ df <- df %>%
 
 ```{r}
 
-# 2) split estratificado 70/30, semilla pedida
+# split 70/30
 set.seed(10101)
 inTrain <- createDataPartition(y = df$Log_Total_hour_salary, p = 0.70, list = FALSE)
 
-# 3) arma train / test con indexado por filas (mejor que row_number())
+# Train y test
 train <- df[inTrain, ]
 test  <- df[-inTrain, ]
 
-# chequeo rápido
+# Revisar
 c(n_train = nrow(train), n_test = nrow(test), prop_train = nrow(train)/nrow(df))
 ```
 
