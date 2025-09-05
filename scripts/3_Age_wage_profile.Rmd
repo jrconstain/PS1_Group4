@@ -10,15 +10,11 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r}
-# Set working directory
-username <- Sys.getenv("USER")
+library(here)
+library(readr)
 
-if (username == "jesusyancy"){
-  path <- "/Users/jesusyancy/Documents/MECA/BDML/TALLERES/TALLER 1"
-} else if(username == ''){
-  path <- ""
-}
-setwd(path)
+ruta <- here("data", "db_clean1.csv")
+df <- read_csv(ruta)
 ```
 
 ```{r}
@@ -33,10 +29,6 @@ p_load(rio, # import/export data
        visdat, # visualizing missing data
        corrplot, # Correlation Plots 
        stargazer) # tables/output to TEX.
-```
-
-```{r}
-df <- read_csv("db_clean.csv")
 ```
 
 ## 3. Age-wage profile.
