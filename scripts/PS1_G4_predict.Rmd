@@ -36,16 +36,22 @@ library(caret)
 ```{r}
 df <- df %>%
   mutate(age2 = age^2)
+
+df <- df |>
+  mutate(bin_female = 1 - sex)
+df$bin_female <- factor(df$bin_female)
+
+df <- df %>%
+  mutate(exp2 = exp^2)
 ```
 
 ```{r}
 
 # split 70/30
 set.seed(10101)
-inTrain <- createDataPartition(y = df$Log_Total_hour_salary, p = 0.70, list = FALSE)
-df <- df |>
-  mutate(bin_female = 1 - sex)
-df$bin_female <- factor(df$bin_female)
+inTrain <- createDataPartition(y = df$Log_Total_hour_salary, p = 0.7, list = FALSE)
+
+
 
 # Train y test
 train <- df[inTrain, ]
@@ -80,7 +86,7 @@ df <- df %>%
 form_B0 <- Log_Total_hour_salary ~ age + age2
 
 # female
-form_B1 <- Log_Total_hour_salary ~ bin_Female
+form_B1 <- Log_Total_hour_salary ~ bin_female
 
 # female + controles
 form_B2 <- Log_Total_hour_salary ~ bin_female + edu_years + age + age2 + formal +  sizeFirm + relab + oficio
@@ -90,146 +96,189 @@ form_B2 <- Log_Total_hour_salary ~ bin_female + edu_years + age + age2 + formal 
 
 ```{r}
 
-form_M1 <- Log_Total_hour_salary ~ poly(age, 3, raw=TRUE) + sex + exp + edu_years + formal + sizeFirm + relab
+form_M1 <- Log_Total_hour_salary ~ bin_female + edu_years + exp + exp2 + formal +  sizeFirm + relab + oficio
 
-form_M2 <- Log_Total_hour_salary ~ poly(age, 4, raw=TRUE) + sex + exp + edu_years + formal + sizeFirm + relab
+form_M2 <- Log_Total_hour_salary ~ poly(age, 4, raw=TRUE) + bin_female + exp + edu_years + formal + sizeFirm + relab
 
-form_M3 <- Log_Total_hour_salary ~ sex * (age + age2) + exp + edu_years + formal + sizeFirm + relab
+form_M3 <- Log_Total_hour_salary ~ bin_female + edu_years + exp + exp2 + exp*edu_years + formal +  sizeFirm + relab + oficio
 
-form_M4 <- Log_Total_hour_salary ~ sex * college + age + age2 + formal + sizeFirm + relab
+form_M4 <- Log_Total_hour_salary ~ poly(exp, 7, raw=TRUE) + oficio + oficio*exp
 
-form_M5 <- Log_Total_hour_salary ~ age + age2 + sex + college + formal + sizeFirm + relab + oficio
+form_M5 <- Log_Total_hour_salary ~ bin_female + edu_years + poly(age, 4, raw=TRUE) + formal + sizeFirm + relab + oficio + estrato1
+
 ```
 
 ```{r}
 set.seed(10101)
-modelo_B0 <- train(form_B0,
-                   data = train,
-                   method = "lm",
-                   metric = "RMSE",
-                   trControl = ctrl)
-  modelo_B0 <- lm(form_B0,
+modelo_B0 <- lm(form_B0,
               data = train)
-  predictions_modelo_B0 <- predict(modelo_B0, test)
-  score_modelo_B0<- RMSE(predictions_modelo_B0, test$Log_Total_hour_salary )
+predictions_modelo_B0 <- predict(modelo_B0, test)
+score_modelo_B0<- RMSE(predictions_modelo_B0, test$Log_Total_hour_salary )
   
+
+#modelo_B0 <- train(form_B0,
+                   #data = train,
+                   #method = "lm",
+                   #metric = "RMSE",
+                   #trControl = ctrl)
+
 # RMSE promedio de los folds (CV interno)
-scoreCV_B0 <- mean(modelo_B0$resample$RMSE)
+#scoreCV_B0 <- mean(modelo_B0$resample$RMSE)
 
 # RMSE en el test (30% hold-out)
-pred_B0 <- predict(modelo_B0, newdata = test)
-scoreTEST_B0 <- RMSE(test$Log_Total_hour_salary, pred_B0)
+#pred_B0 <- predict(modelo_B0, newdata = test)
+#scoreTEST_B0 <- RMSE(test$Log_Total_hour_salary, pred_B0)
 
 modelo_B0
 ```
 
 ```{r}
 set.seed(10101)
-modelo_B1 <- train(form_B1,
-                   data = train,
-                   method = "lm",
-                   metric = "RMSE",
-                   trControl = ctrl)
+modelo_B1 <- lm(form_B1,
+              data = train)
+predictions_modelo_B1 <- predict(modelo_B1, test)
+score_modelo_B1<- RMSE(predictions_modelo_B1, test$Log_Total_hour_salary )
+  
+
+#modelo_B1 <- train(form_B1,
+ #                  data = train,
+  #                 method = "lm",
+   #                metric = "RMSE",
+    #               trControl = ctrl)
 
 # RMSE promedio de los folds (CV interno)
-scoreCV_B1 <- mean(modelo_B1$resample$RMSE)
+#scoreCV_B1 <- mean(modelo_B1$resample$RMSE)
 
 # RMSE en el test (30% hold-out)
-pred_B1 <- predict(modelo_B1, newdata = test)
-scoreTEST_B1 <- RMSE(test$Log_Total_hour_salary, pred_B1)
+#pred_B1 <- predict(modelo_B1, newdata = test)
+#scoreTEST_B1 <- RMSE(test$Log_Total_hour_salary, pred_B1)
 
 modelo_B1
 ```
 
 ```{r}
 set.seed(10101)
-modelo_B2 <- train(form_B2,
-                   data = train,
-                   method = "lm",
-                   metric = "RMSE",
-                   trControl = ctrl)
+modelo_B2 <- lm(form_B2,
+              data = train)
+predictions_modelo_B2 <- predict(modelo_B2, test)
+score_modelo_B2<- RMSE(predictions_modelo_B2, test$Log_Total_hour_salary )
+
+
+#modelo_B2 <- train(form_B2,
+ #                  data = train,
+  #                 method = "lm",
+   #                metric = "RMSE",
+    #               trControl = ctrl)
 
 # RMSE promedio de los folds (CV interno)
-scoreCV_B2 <- mean(modelo_B2$resample$RMSE)
+#scoreCV_B2 <- mean(modelo_B2$resample$RMSE)
 
 # RMSE en el test (30% hold-out)
-pred_B2 <- predict(modelo_B2, newdata = test)
-scoreTEST_B2 <- RMSE(test$Log_Total_hour_salary, pred_B2)
+#pred_B2 <- predict(modelo_B2, newdata = test)
+#scoreTEST_B2 <- RMSE(test$Log_Total_hour_salary, pred_B2)
 
 modelo_B2
 ```
 
 ```{r}
 set.seed(10101)
-modelo_M1 <- train(form_M1,
-                   data = train,
-                   method = "lm",
-                   metric = "RMSE",
-                   trControl = ctrl)
+modelo_M1 <- lm(form_M1,
+              data = train)
+predictions_modelo_M1 <- predict(modelo_M1, test)
+score_modelo_M1<- RMSE(predictions_modelo_M1, test$Log_Total_hour_salary )
+  
 
-scoreCV_M1 <- mean(modelo_M1$resample$RMSE)
-pred_M1 <- predict(modelo_M1, newdata = test)
-scoreTEST_M1 <- RMSE(test$Log_Total_hour_salary, pred_M1)
+#modelo_M1 <- train(form_M1,
+ #                  data = train,
+  #                 method = "lm",
+   #                metric = "RMSE",
+    #               trControl = ctrl)
+
+#scoreCV_M1 <- mean(modelo_M1$resample$RMSE)
+#pred_M1 <- predict(modelo_M1, newdata = test)
+#scoreTEST_M1 <- RMSE(test$Log_Total_hour_salary, pred_M1)
 
 modelo_M1
 ```
 
 ```{r}
 set.seed(10101)
-modelo_M2 <- train(form_M2,
-                   data = train,
-                   method = "lm",
-                   metric = "RMSE",
-                   trControl = ctrl)
+modelo_M2 <- lm(form_M2,
+              data = train)
+predictions_modelo_M2 <- predict(modelo_M2, test)
+score_modelo_M2<- RMSE(predictions_modelo_M2, test$Log_Total_hour_salary )
+  
 
-scoreCV_M2 <- mean(modelo_M2$resample$RMSE)
-pred_M2 <- predict(modelo_M2, newdata = test)
-scoreTEST_M2 <- RMSE(test$Log_Total_hour_salary, pred_M2)
+#modelo_M2 <- train(form_M2,
+#                   data = train,
+ #                  method = "lm",
+  #                 metric = "RMSE",
+   #                trControl = ctrl)
+
+#scoreCV_M2 <- mean(modelo_M2$resample$RMSE)
+#pred_M2 <- predict(modelo_M2, newdata = test)
+#scoreTEST_M2 <- RMSE(test$Log_Total_hour_salary, pred_M2)
 
 modelo_M2
 ```
 
 ```{r}
 set.seed(10101)
-modelo_M3 <- train(form_M3,
-                   data = train,
-                   method = "lm",
-                   metric = "RMSE",
-                   trControl = ctrl)
+modelo_M3 <- lm(form_M3,
+              data = train)
+predictions_modelo_M3 <- predict(modelo_M3, test)
+score_modelo_M3<- RMSE(predictions_modelo_M3, test$Log_Total_hour_salary )
 
-scoreCV_M3 <- mean(modelo_M3$resample$RMSE)
-pred_M3 <- predict(modelo_M3, newdata = test)
-scoreTEST_M3 <- RMSE(test$Log_Total_hour_salary, pred_M3)
+#modelo_M3 <- train(form_M3,
+ #                  data = train,
+  #                 method = "lm",
+   #                metric = "RMSE",
+    #               trControl = ctrl)
+
+#scoreCV_M3 <- mean(modelo_M3$resample$RMSE)
+#pred_M3 <- predict(modelo_M3, newdata = test)
+#scoreTEST_M3 <- RMSE(test$Log_Total_hour_salary, pred_M3)
 
 modelo_M3
 ```
 
 ```{r}
 set.seed(10101)
-modelo_M4 <- train(form_M4,
-                   data = train,
-                   method = "lm",
-                   metric = "RMSE",
-                   trControl = ctrl)
+modelo_M4 <- lm(form_M4,
+              data = train)
+predictions_modelo_M4 <- predict(modelo_M4, test)
+score_modelo_M4<- RMSE(predictions_modelo_M4, test$Log_Total_hour_salary )
 
-scoreCV_M4 <- mean(modelo_M4$resample$RMSE)
-pred_M4 <- predict(modelo_M4, newdata = test)
-scoreTEST_M4 <- RMSE(test$Log_Total_hour_salary, pred_M4)
+
+#modelo_M4 <- train(form_M4,
+ #                  data = train,
+  #                 method = "lm",
+   #                metric = "RMSE",
+    #               trControl = ctrl)
+
+#scoreCV_M4 <- mean(modelo_M4$resample$RMSE)
+#pred_M4 <- predict(modelo_M4, newdata = test)
+#scoreTEST_M4 <- RMSE(test$Log_Total_hour_salary, pred_M4)
 
 modelo_M4
 ```
 
 ```{r}
 set.seed(10101)
-modelo_M5 <- train(form_M5,
-                   data = train,
-                   method = "lm",
-                   metric = "RMSE",
-                   trControl = ctrl)
+modelo_M5 <- lm(form_M5,
+              data = train)
+predictions_modelo_M5 <- predict(modelo_M5, test)
+score_modelo_M5<- RMSE(predictions_modelo_M5, test$Log_Total_hour_salary )
 
-scoreCV_M5 <- mean(modelo_M5$resample$RMSE)
-pred_M5 <- predict(modelo_M5, newdata = test)
-scoreTEST_M5 <- RMSE(test$Log_Total_hour_salary, pred_M5)
+#modelo_M5 <- train(form_M5,
+ #                  data = train,
+  #                 method = "lm",
+   #                metric = "RMSE",
+    #               trControl = ctrl)
+
+#scoreCV_M5 <- mean(modelo_M5$resample$RMSE)
+#pred_M5 <- predict(modelo_M5, newdata = test)
+#scoreTEST_M5 <- RMSE(test$Log_Total_hour_salary, pred_M5)
 
 modelo_M5
 ```
@@ -238,20 +287,56 @@ modelo_M5
 tabla_modelos <- data.frame(
   Modelo    = c("B0_age2","B1_female","B2_female_ctrl",
                 "M1","M2","M3","M4","M5"),
-  RMSE_CV   = c(scoreCV_B0, scoreCV_B1, scoreCV_B2,
-                scoreCV_M1, scoreCV_M2, scoreCV_M3, scoreCV_M4, scoreCV_M5),
-  RMSE_TEST = c(scoreTEST_B0, scoreTEST_B1, scoreTEST_B2,
-                scoreTEST_M1, scoreTEST_M2, scoreTEST_M3, scoreTEST_M4, scoreTEST_M5)
+  RMSE_LM   = C(score_modelo_B0,score_modelo_B1,score_modelo_B2,score_modelo_M1,score_modelo_M2,score_modelo_M3,score_modelo_M4,score_modelo_M5)
+  #RMSE_CV   = c(scoreCV_B0, scoreCV_B1, scoreCV_B2,
+               # scoreCV_M1, scoreCV_M2, scoreCV_M3, scoreCV_M4, scoreCV_M5),
+  #RMSE_TEST = c(scoreTEST_B0, scoreTEST_B1, scoreTEST_B2,
+                #scoreTEST_M1, scoreTEST_M2, scoreTEST_M3, scoreTEST_M4, scoreTEST_M5)
 )
 
 # Ordena por desempeño en test (menor RMSE es mejor)
-tabla_modelos <- tabla_modelos[order(tabla_modelos$RMSE_TEST), ]
+tabla_modelos <- tabla_modelos[order(tabla_modelos$RMSE_LM), ]
 tabla_modelos
+
+scores_LOOCV <- c()
+
+
+  set.seed(10101)   
+  
+    ## define cross validation method
+  ctrl <- trainControl(method = "LOOCV")  ## Method
+  # train the model
+  LOOCVB0 <- train(form_B0,
+                 data = df,
+                 method = 'lm', 
+                 trControl= ctrl)
+  
+  ## Save the RMSE
+  score <-RMSE(LOOCVB0$pred$pred, df$Log_Total_hour_salary)
+  scores_LOOCV<- append(scores_LOOCV, score) 
+  
+  
+    set.seed(10101)   
+  # train the model
+  LOOCVM1 <- train(form_M1,
+                 data = df,
+                 method = 'lm', 
+                 trControl= ctrl)
+  
+  ## Save the RMSE
+  scoreM1 <-RMSE(LOOCVM1$pred$pred, df$Log_Total_hour_salary)
+  scores_LOOCV<- append(scores_LOOCV, scoreM1) 
+  
+  
+scores_LOOCV  
+
 ```
 
 
 
 
+```{R}
 
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+  ```
