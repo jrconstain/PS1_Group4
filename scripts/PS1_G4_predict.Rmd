@@ -43,6 +43,9 @@ df <- df %>%
 # split 70/30
 set.seed(10101)
 inTrain <- createDataPartition(y = df$Log_Total_hour_salary, p = 0.70, list = FALSE)
+df <- df |>
+  mutate(bin_female = 1 - sex)
+df$bin_female <- factor(df$bin_female)
 
 # Train y test
 train <- df[inTrain, ]
@@ -55,8 +58,7 @@ c(n_train = nrow(train), n_test = nrow(test), prop_train = nrow(train)/nrow(df))
 ```{r}
 # Control de re-muestreo: k-fold CV
 ctrl <- trainControl(
-  method = "cv",   # cross-validation
-  number = 5       # 10 folds
+  method = "lm"      # 10 folds
 )
 ```
 
@@ -65,7 +67,7 @@ ctrl <- trainControl(
 
 df <- df %>%
   mutate(across(
-    c(sex, formal, sizeFirm, relab, oficio, college),
+    c(bin_female, formal, sizeFirm, relab, oficio, college),
     ~ as.factor(.)
   ))
 
@@ -78,10 +80,10 @@ df <- df %>%
 form_B0 <- Log_Total_hour_salary ~ age + age2
 
 # female
-form_B1 <- Log_Total_hour_salary ~ sex
+form_B1 <- Log_Total_hour_salary ~ bin_Female
 
 # female + controles
-form_B2 <- Log_Total_hour_salary ~ sex + age + age2 + exp + edu_years + formal + sizeFirm + relab
+form_B2 <- Log_Total_hour_salary ~ bin_female + edu_years + age + age2 + formal +  sizeFirm + relab + oficio
 ```
 
 ### Regresiones nuevas
@@ -106,7 +108,11 @@ modelo_B0 <- train(form_B0,
                    method = "lm",
                    metric = "RMSE",
                    trControl = ctrl)
-
+  modelo_B0 <- lm(form_B0,
+              data = train)
+  predictions_modelo_B0 <- predict(modelo_B0, test)
+  score_modelo_B0<- RMSE(predictions_modelo_B0, test$Log_Total_hour_salary )
+  
 # RMSE promedio de los folds (CV interno)
 scoreCV_B0 <- mean(modelo_B0$resample$RMSE)
 
