@@ -152,44 +152,60 @@ hours_vars  <- c("totalHoursWorked", "hoursWorkUsual", "hoursWorkActualSecondJob
 
                  
 # Explore statistics
+base_theme <- theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(face = "bold", size = 13, margin = margin(b = 6)),
+    axis.title = element_text(size = 11),
+    strip.text = element_text(face = "bold"),
+    panel.grid.minor = element_blank()
+  )
+
 
 # Función general para graficar un conjunto de variables
-graficar_variables <- function(df, vars, titulo = "Distribución") {
-  # Convertir a formato largo
+graficar_variables <- function(df, vars, titulo = "Distribución", bins = 30) {
+
   df_long <- df %>%
-    select(all_of(vars)) %>%
-    pivot_longer(cols = everything(), names_to = "variable", values_to = "valor")
+    dplyr::select(all_of(vars)) %>%
+    pivot_longer(cols = everything(), names_to = "variable", values_to = "valor") %>%
+    filter(is.finite(valor))
   
   # Histograma + densidad
-  p1 <- ggplot(df_long, aes(x = valor)) +
-    geom_histogram(aes(y = ..density..), bins = 30, fill = "steelblue", color = "white", alpha = 0.6) +
-    geom_density(color = "darkred", size = 0.3) +
-    facet_wrap(~ variable, scales = "free") +
-    labs(title = paste(titulo, "- Histogramas y Densidad")) +
-    theme_minimal()
+ p1 <- ggplot(df_long, aes(x = valor)) +
+    geom_histogram(aes(y = after_stat(density)),
+                   bins = bins, fill = "steelblue", color = "white", alpha = 0.7) +
+    geom_density(color = "darkred", linewidth = 0.4, na.rm = TRUE) +
+    facet_wrap(~ variable, scales = "free", ncol = 2) +
+    labs(
+      title = paste(titulo, "- Histogramas y Densidad"),
+      x = "Valor", y = "Densidad"
+    ) +
+    base_theme
   
   # Boxplots
   p2 <- ggplot(df_long, aes(x = variable, y = valor)) +
-    geom_boxplot(fill = "steelblue", outlier.color = "orange") +
-    labs(title = paste(titulo, "- Boxplots"), x = "Variable", y = "Valor") +
-    theme_minimal() +
-    coord_flip()
-  
-  return(list(histogramas = p1, boxplots = p2))
+    geom_boxplot(fill = "steelblue", outlier.color = "orange", width = 0.7) +
+    coord_flip() +
+    labs(
+      title = paste(titulo, "- Boxplots"),
+      x = "Variable", y = "Valor"
+    ) +
+    base_theme
+
+  list(histogramas = p1, boxplots = p2)
 }
 
 # Ingresos
 g_income <- graficar_variables(db, income_vars, "Ingresos")
 print(g_income$histogramas)
 print(g_income$boxplots)
-stargazer(as.data.frame(db[,income_vars]), type="text") 
+stargazer(as.data.frame(db[, income_vars]), type = "text")
 ```
 ```{r}
 # Salarios por hora
 g_wage <- graficar_variables(db, wage_vars, "Salarios por hora")
 print(g_wage$histogramas)
 print(g_wage$boxplots)
-stargazer(as.data.frame(db[,wage_vars]), type="text") 
+stargazer(as.data.frame(db[, wage_vars]), type = "text")
 ```
 
 ```{r}
@@ -197,7 +213,7 @@ stargazer(as.data.frame(db[,wage_vars]), type="text")
 g_hours <- graficar_variables(db, hours_vars, "Horas trabajadas")
 print(g_hours$histogramas)
 print(g_hours$boxplots)
-stargazer(as.data.frame(db[,hours_vars]), type="text") 
+stargazer(as.data.frame(db[, hours_vars]), type = "text")
 ```
 
 # Characteristics of individuals and jobs
