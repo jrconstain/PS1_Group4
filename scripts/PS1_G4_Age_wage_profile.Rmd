@@ -13,7 +13,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(here)
 library(readr)
 
-ruta <- here("data", "db_clean1.csv")
+ruta <- here("data", "db_clean2.csv")
 df <- read_csv(ruta)
 ```
 
@@ -54,11 +54,11 @@ stargazer(model_age, type = "text")
 
 $\beta_2>0$ y $\beta_3<0$ confirman una trayectoria cóncava:$\partial\ln w/\partial \text{age}=\beta_2+2\beta_3\text{age}$ es positiva a edades tempranas y decrece con la edad.
 
-La estimación del perfil edad–salario muestra un coeficiente positivo para la edad (0.065) y un coeficiente negativo para la edad al cuadrado (-0.001), ambos estadísticamente significativos al 1%. Esto implica que los salarios horarios aumentan con la edad, pero a un ritmo decreciente, confirmando la forma cóncava predicha por la teoría de capital humano.
+La estimación del perfil edad–salario muestra un coeficiente positivo para la edad (0.067) y un coeficiente negativo para la edad al cuadrado (-0.001), ambos estadísticamente significativos al 1%. Esto implica que los salarios horarios aumentan con la edad, pero a un ritmo decreciente, confirmando la forma cóncava predicha por la teoría de capital humano.
 
 ### Ajuste en muestra 
 
-El $R^2=0.039$ es esperable en este tipo de estimaciones: la variación no explicada suele residir en educación, ocupación, sector, horas y otros controles no modelados. Que el ajuste sea bajo no invalida el hallazgo central sobre la forma del perfil (Mincer, 1974).  
+El $R^2=0.044$ es esperable en este tipo de estimaciones: la variación no explicada suele residir en educación, ocupación, sector, horas y otros controles no modelados. Que el ajuste sea bajo no invalida el hallazgo central sobre la forma del perfil (Mincer, 1974).  
 
 
 ## Peak age
@@ -81,7 +81,7 @@ La edad que maximiza el salario esperado es
 
 $age^*=-\frac{\hat\beta_2}{2\hat\beta_3}=\mathbf{45.33}\ \text{años}.$
 
-Para la muestra original, la edad del máximo es 45.33 años y, a partir de un bootstrap no paramétrico con 1,000 réplicas, obtenemos sesgo ≈ 0.034, EE ≈ 0.699, e intervalo percentil 95% $[44.11,\ 46.83]$. Esto sitúa el pico de salario por hora de manera estadísticamente precisa en la segunda mitad de los 40s, coherente con la acumulación temprana de capital humano y retornos decrecientes conforme aumentan los años. La Figura x (perfil estimado) muestra la pendiente positiva inicial, el aplanamiento alrededor del pico y una ligera caída posterior, tal como documentan los perfiles edad–salario clásicos.  
+Para la muestra original, la edad del máximo es 45.3 años y, a partir de un bootstrap no paramétrico con 1,000 réplicas, obtenemos sesgo ≈ 0.034, EE ≈ 0.699, e intervalo percentil 95% $[44.20,\ 46.84]$. Esto sitúa el pico de salario por hora de manera estadísticamente precisa en la segunda mitad de los 40s, coherente con la acumulación temprana de capital humano y retornos decrecientes conforme aumentan los años. La Figura x (perfil estimado) muestra la pendiente positiva inicial, el aplanamiento alrededor del pico y una ligera caída posterior, tal como documentan los perfiles edad–salario clásicos.  
 
 ```{r}
 library(ggplot2)
