@@ -35,9 +35,19 @@ dim(db) # database dimensions
 First, we drop all observations with ages < 18. 
 
 ```{r}
+library(here)
+library(readr)
+
+ruta <- here("data", "data.csv")
+db <- read_csv(ruta)
+```
+
+
+
+```{r}
 # Leave observations with age > 18
 db <- db |>
-  filter(age > 18)
+  filter(age >= 18)
 # New database dimensions
 dim(db)
 # Number and proportion of minors
@@ -268,5 +278,5 @@ db <- db|>
 
 db_clean = db %>% select(Log_Total_hour_salary, ingtot, y_ingLab_m, y_salary_m, y_salarySec_m, y_ingLab_m_ha, y_salary_m_hu, y_salarySec_m_ha, totalHoursWorked, hoursWorkUsual, hoursWorkActualSecondJob, age, sex, estrato1, maxEducLevel, college, edu_years, exp, oficio, relab, formal, microEmpresa, regSalud, sizeFirm, p6240, ocu, dsi)
 
-write.csv(db_clean, file.path(ruta_datos, "db_clean1.csv"), row.names = FALSE)
+write.csv(db_clean, "db_clean1.csv")
 ```
