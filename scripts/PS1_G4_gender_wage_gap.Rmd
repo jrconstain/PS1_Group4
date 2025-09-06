@@ -39,6 +39,16 @@ dim(db) # database dimensions
 $$ log(w) = β_1 + β_2Female + u $$
 
 ```{r}
+library(here)
+library(readr)
+
+ruta <- here("data", "db_clean1.csv")
+db <- read_csv(ruta)
+```
+
+
+
+```{r}
 # Create indicator of female
 db <- db |>
   mutate(bin_female = 1 - sex)
@@ -221,20 +231,35 @@ ggplot(db, aes(x = age, y = Log_Total_hour_salary , color = as.factor(bin_female
 model_equality3interaction <- lm(Log_Total_hour_salary ~ bin_female + age + age2 + age*bin_female + age2*bin_female + edu_years + formal +  sizeFirm + relab + oficio, data = db)
 
 # --- Picos por género ---
-db= db%>%
-  mutate(bin_female=as.factor(db$bin_female))
-class(db$bin_female)
+## Usa tu modelo ya estimado:
+fit <- model_equality3interaction
 
-co <- coef(model_equality3interaction)
+co <- coef(fit)
+nm <- names(co)
 
-b2 <- co["age"]
-b3 <- if ("age2" %in% names(co)) co["age2"]
+# Mira los nombres si quieres verificar:
+print(nm)
 
-# nombres de interacciones pueden variar si bin_female es factor vs numérico:
-d2 <- co[intersect(c("age:bin_female"), names(co))]
-d3 <- co[intersect(c("age2:bin_female","I(age^2):bin_female"), names(co))]
+# Helpers: busca el nombre correcto entre varias variantes
+pick1 <- function(cands) {
+  hit <- intersect(cands, nm)
+  if (length(hit) != 1) stop("No se identificó de forma única: ", paste(cands, collapse=", "))
+  unname(co[hit])
+}
 
+# β2 (age) y β3 (age^2 o I(age^2))
+b2 <- pick1(c("age"))
+b3 <- pick1(c("age2", "I(age^2)"))
 
+# δ2 (interacción lineal) y δ3 (interacción cuadrática)
+# cubre orden y codificación (numérica o factor con '1')
+d2 <- pick1(c("age:bin_female","bin_female:age","age:bin_female1","bin_female1:age"))
+d3 <- pick1(c("age2:bin_female","bin_female:age2",
+              "I(age^2):bin_female","bin_female:I(age^2)",
+              "age2:bin_female1","bin_female1:age2",
+              "I(age^2):bin_female1","bin_female1:I(age^2)"))
+
+# Picos
 a_H <- - b2 / (2*b3)
 a_M <- - (b2 + d2) / (2*(b3 + d3))
 
