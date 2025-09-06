@@ -26,10 +26,11 @@ p_load(rio, # Import/export data.
 # Working directory setting
 username <- Sys.getenv("USERNAME")
 # Dynamic filepath
-ruta_datos <- file.path("C:/Users", username, "Documents",
-                        "MEcA - Uniandes/2025-2/Big Data y Machine Learning/PS1_Group4/data")
+#ruta_datos <- file.path("C:/Users", username, "Documents",
+                      #  "MEcA - Uniandes/2025-2/Big Data y Machine Learning/PS1_Group4/data")
 # Load original database                  
-db<- read_csv(file.path(ruta_datos, "db_clean1.csv"))
+#db<- read_csv(file.path(ruta_datos, "db_clean1.csv"))
+db <- read_csv(file.choose())
 dim(db) # database dimensions
 ```
 
@@ -82,7 +83,7 @@ model_equality3 <- lm(Log_Total_hour_salary ~ bin_female + edu_years + age + age
 
 
 # View the coefficients
-stargazer(model_sex, model_equality1, model_equality2, model_equality3, type = "text", out = "tabla_modelo.txt")
+stargazer(model_sex, model_equality1, model_equality2, model_equality3, type = "text", digits=7 ,out = "tabla_modelo.txt")
 
 ```
 
@@ -95,5 +96,118 @@ db %>%
               digits = all_continuous() ~ 2) %>%
   add_n() %>%           # agrega N por grupo
   add_p()               # prueba de diferencia (opcional)
+
+```
+
+
+
+
+
+
+
+
+```{R}
+
+#Running the model with FWL to check same results as the above estimations (Model 3)
+
+
+db$bin_female <- as.numeric(as.character(db$bin_female))
+db$Log_Total_hour_salary <- as.numeric(as.character(db$Log_Total_hour_salary))
+
+# Individual + Firm nature + occupation
+
+db<-db %>% mutate(Female3ResidX=lm(bin_female~edu_years + age + age2 + formal +  sizeFirm + relab + oficio,data = db)$residuals) #Residuals of weight~foreign 
+
+db<-db %>% mutate(LogSal3ResidX=lm(Log_Total_hour_salary~edu_years + age + age2 + formal +  sizeFirm + relab + oficio,data = db)$residuals) #Residuals of mpg~foreign 
+
+model_equality3_FWL<-lm(LogSal3ResidX~Female3ResidX,db)
+stargazer(model_equality3,model_equality3_FWL,type="text",digits=7)
+
+#Running the model with FWL to check same results as the above estimations (Model 2)
+
+
+# Individual  + Firm nature
+
+db<-db %>% mutate(Female2ResidX=lm(bin_female~edu_years + age + age2 + formal +  sizeFirm + relab ,data = db)$residuals) #Residuals of weight~foreign 
+
+db<-db %>% mutate(LogSal2ResidX=lm(Log_Total_hour_salary~edu_years + age + age2 + formal +  sizeFirm + relab,data = db)$residuals) #Residuals of mpg~foreign 
+
+model_equality2_FWL<-lm(LogSal2ResidX~Female2ResidX,db)
+stargazer(model_equality2,model_equality2_FWL,type="text",digits=7)
+
+#Running the model with FWL to check same results as the above estimations (Model 1)
+
+
+
+# Individual
+
+db<-db %>% mutate(FemaleResidX=lm(bin_female~edu_years + age + age2,data = db)$residuals) #Residuals of weight~foreign 
+
+db<-db %>% mutate(LogSalResidX=lm(Log_Total_hour_salary~edu_years + age + age2,data = db)$residuals) #Residuals of mpg~foreign 
+
+model_equality1_FWL<-lm(LogSalResidX~FemaleResidX,db)
+stargazer(model_equality1,model_equality1_FWL,type="text",digits=7)
+
+
+
+
+stargazer(model_sex, model_equality1_FWL, model_equality2_FWL, model_equality3_FWL, type="text",digits=7)
+
+#Dado que nos vamos a quedar con 3, corrijo el error estandar, dado que R, no reconoce el numero real de estimadores implicados en FWL:
+
+
+n <- nrow(db)
+
+# Número de parámetros en el modelo completo (incluye intercepto)
+k <- length(coef(model_equality3))
+
+# Varianza-covarianza del modelo FWL
+vcov_fwl <- vcov(model_equality3_FWL)
+
+# Corrección por grados de libertad
+vcov_fwl_corrected <- vcov_fwl * ((n - 1) / (n - k))
+
+# Error estándar corregido
+se_corrected <- sqrt(diag(vcov_fwl_corrected))
+se_corrected
+
+
+
+
+
+```
+
+
+
+
+
+
+
+
+```{R}
+
+#Sacamos los errores estandar con Bootstrap
+p_load("boot")
+
+
+
+boot_fwl <- function(data, indices) {
+  db <- data[indices, ]
+  LogSalBootResidX <- resid(lm(Log_Total_hour_salary~edu_years + age + age2 + formal +  sizeFirm + relab + oficio,data = db))
+  FemaleBootResidX <- resid(lm(bin_female~edu_years + age + age2 + formal +  sizeFirm + relab + oficio,data = db))
+  coef(lm(LogSalBootResidX ~ FemaleBootResidX ))[2]
+}
+
+
+boot_fwl(db,1:nrow(db))
+
+set.seed(10101)
+results <- boot(db, boot_fwl, R = 1000)
+results
+boot.ci(results, type = "perc")
+
+
+
+summary(model_equality3_FWL)
 
 ```
