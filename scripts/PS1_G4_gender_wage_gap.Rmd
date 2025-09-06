@@ -42,12 +42,18 @@ $$ log(w) = β_1 + β_2Female + u $$
 # Create indicator of female
 db <- db |>
   mutate(bin_female = 1 - sex)
-db$bin_female <- factor(db$bin_female)
-
+db$bin_female <- as.factor(db$bin_female)
+class(db$bin_female)
 # Run the model 
 model_sex <- lm(Log_Total_hour_salary ~ bin_female, data = db)
 # View the coefficients
 stargazer(model_sex, type = "text")
+
+db <- db %>%
+  mutate(across(
+    c(bin_female, formal, sizeFirm, relab, oficio),
+    ~ as.factor(.)
+  ))
 
 ```
 
@@ -81,7 +87,6 @@ model_equality2 <- lm(Log_Total_hour_salary ~ bin_female + edu_years + age + age
 # Individual + Firm nature + occupation
 model_equality3 <- lm(Log_Total_hour_salary ~ bin_female + edu_years + age + age2 + formal +  sizeFirm + relab + oficio, data = db)
 
-
 # View the coefficients
 stargazer(model_sex, model_equality1, model_equality2, model_equality3, type = "text", digits=7 ,out = "tabla_modelo.txt")
 
@@ -98,13 +103,6 @@ db %>%
   add_p()               # prueba de diferencia (opcional)
 
 ```
-
-
-
-
-
-
-
 
 ```{R}
 
@@ -177,13 +175,6 @@ se_corrected
 
 ```
 
-
-
-
-
-
-
-
 ```{R}
 
 #Sacamos los errores estandar con Bootstrap
@@ -211,3 +202,143 @@ boot.ci(results, type = "perc")
 summary(model_equality3_FWL)
 
 ```
+
+
+```{R}
+# ======================================================
+# Perfiles y Picos por Género (Edad)
+# ======================================================
+
+# --- Perfil edad-salario por género (modelo cuadrático con puntos) ---
+ggplot(db, aes(x = age, y = Log_Total_hour_salary , color = as.factor(bin_female))) +
+  geom_point(alpha = 0.3, size = 1) +  # puntos de los datos
+  geom_smooth(method = "lm", formula = y ~ x + I(x^2), se = TRUE, linewidth = 1) +
+  scale_color_manual(values = c("0" = "blue", "1" = "red"), name = "Género") +
+  labs(title = "Perfil Edad-Salario por Género (Modelo Cuadrático)",
+       x = "Edad (años)", y = "Log(Salario por Hora)") +
+  theme_minimal()
+
+model_equality3interaction <- lm(Log_Total_hour_salary ~ bin_female + age + age2 + age*bin_female + age2*bin_female + edu_years + formal +  sizeFirm + relab + oficio, data = db)
+
+# --- Picos por género ---
+db= db%>%
+  mutate(bin_female=as.factor(db$bin_female))
+class(db$bin_female)
+
+co <- coef(model_equality3interaction)
+
+b2 <- co["age"]
+b3 <- if ("age2" %in% names(co)) co["age2"]
+
+# nombres de interacciones pueden variar si bin_female es factor vs numérico:
+d2 <- co[intersect(c("age:bin_female"), names(co))]
+d3 <- co[intersect(c("age2:bin_female","I(age^2):bin_female"), names(co))]
+
+
+a_H <- - b2 / (2*b3)
+a_M <- - (b2 + d2) / (2*(b3 + d3))
+
+c(peak_men = a_H, peak_women = a_M)
+
+# ======================================================
+# Bootstrap para intervalos de confianza de los picos (Edad)
+# ======================================================
+calcular_pico_edad <- function(data, indices) {
+  d <- data[indices, ]
+  fit <- lm(log_wage ~ Edad + Edad2, data = d)
+  coefs <- coef(fit)
+  return(-coefs["Edad"] / (2 * coefs["Edad2"]))
+}
+
+# Bootstrap hombres
+set.seed(123)
+boot_hombres_edad <- boot(data = subset(geih_modelo, female == "Hombre"), 
+                          statistic = calcular_pico_edad, R = 1000)
+ci_hombres_edad <- boot.ci(boot_hombres_edad, type = "perc")
+cat("IC 95% para el pico de Edad en Hombres:\n")
+print(ci_hombres_edad)
+
+# Bootstrap mujeres
+set.seed(123)
+boot_mujeres_edad <- boot(data = subset(geih_modelo, female == "Mujer"), 
+                          statistic = calcular_pico_edad, R = 1000)
+ci_mujeres_edad <- boot.ci(boot_mujeres_edad, type = "perc")
+cat("IC 95% para el pico de Edad en Mujeres:\n")
+print(ci_mujeres_edad)
+
+
+
+
+```
+
+```{r}
+fit <- model_equality3
+
+
+# edad^2: toma "age2" si existe; de lo contrario usa "I(age^2)"
+b2 <- coef(fit)["age"]
+b3 <- if ("age2" %in% names(coef(fit))) coef(fit)["age2"] else coef(fit)["I(age^2)"]
+a_star <- -b2/(2*b3)
+
+# helper: curva promedio por sexo (0 = hombres, 1 = mujeres)
+pred_curve <- function(sex_level, ages) {
+  sapply(ages, function(a) {
+    nd <- transform(
+      db,
+      bin_female = factor(sex_level, levels = levels(model.frame(fit)$bin_female)),
+      age = a,
+      age2 = a^2
+    )
+    mean(exp(predict(fit, newdata = nd)), na.rm = TRUE)
+  })
+}
+
+# rango de edades y curvas
+age_min <- 18
+age_max <- ceiling(max(db$age, na.rm = TRUE))
+ages    <- seq(age_min, age_max, length.out = 300)
+
+w_m <- pred_curve(0, ages)  # hombres
+w_f <- pred_curve(1, ages)  # mujeres
+
+# salarios en la edad pico común
+nd_m_star <- transform(db,
+  bin_female = factor(0, levels = levels(model.frame(fit)$bin_female)),
+  age = a_star, age2 = a_star^2)
+nd_f_star <- transform(db,
+  bin_female = factor(1, levels = levels(model.frame(fit)$bin_female)),
+  age = a_star, age2 = a_star^2)
+
+w_m_star <- mean(exp(predict(fit, newdata = nd_m_star)), na.rm = TRUE)
+w_f_star <- mean(exp(predict(fit, newdata = nd_f_star)), na.rm = TRUE)
+
+# data para graficar
+curves <- rbind(
+  data.frame(age = ages, wage = w_m, group = "Hombres"),
+  data.frame(age = ages, wage = w_f, group = "Mujeres")
+)
+peaks <- rbind(
+  data.frame(age = a_star, wage = w_m_star, group = "Hombres"),
+  data.frame(age = a_star, wage = w_f_star, group = "Mujeres")
+)
+
+# brecha en el pico
+gap_abs <- w_m_star - w_f_star
+gap_pct <- 100 * (w_m_star / w_f_star - 1)
+
+ggplot(curves, aes(age, wage, linetype = group)) +
+  geom_line(color = "black", linewidth = 1) +
+  geom_segment(aes(x = a_star, xend = a_star, y = w_f_star, yend = w_m_star),
+               color = "grey30", linewidth = 0.7, inherit.aes = FALSE) +
+  geom_point(data = peaks, aes(age, wage), shape = 21, size = 2.6,
+             fill = "white", color = "black", stroke = 0.7, inherit.aes = FALSE) +
+    scale_linetype_manual(NULL, values = c("Hombres" = "solid", "Mujeres" = "dashed")) +
+  scale_x_continuous(limits = c(age_min, age_max), breaks = seq(18, age_max, by = 4)) +
+  labs(title = "Perfil edad–salario por sexo (modelo con controles)",
+       x = "Edad (años)", y = "Salario por hora (niveles)") +
+  theme_classic(base_size = 11) +
+  theme(plot.title = element_text(face = "bold"),
+        axis.title = element_text(face = "bold"),
+        legend.position = "top")
+```
+
