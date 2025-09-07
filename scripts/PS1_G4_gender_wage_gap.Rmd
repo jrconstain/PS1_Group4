@@ -6,7 +6,6 @@ output: html_document
 ---
 
 ```{r}
-install.packages("pacman")
 library(pacman)
 
 p_load(rio, # Import/export data.
@@ -42,7 +41,7 @@ $$ log(w) = β_1 + β_2Female + u $$
 library(here)
 library(readr)
 
-ruta <- here("data", "db_clean1.csv")
+ruta <- here("scripts", "db_clean1.csv")
 db <- read_csv(ruta)
 ```
 
@@ -215,32 +214,17 @@ summary(model_equality3_FWL)
 
 
 ```{R}
-# ======================================================
-# Perfiles y Picos por Género (Edad)
-# ======================================================
-
-# --- Perfil edad-salario por género (modelo cuadrático con puntos) ---
-ggplot(db, aes(x = age, y = Log_Total_hour_salary , color = as.factor(bin_female))) +
-  geom_point(alpha = 0.3, size = 1) +  # puntos de los datos
-  geom_smooth(method = "lm", formula = y ~ x + I(x^2), se = TRUE, linewidth = 1) +
-  scale_color_manual(values = c("0" = "blue", "1" = "red"), name = "Género") +
-  labs(title = "Perfil Edad-Salario por Género (Modelo Cuadrático)",
-       x = "Edad (años)", y = "Log(Salario por Hora)") +
-  theme_minimal()
+# Perfiles y Picos por Género (Edad) modelo con controles
 
 model_equality3interaction <- lm(Log_Total_hour_salary ~ bin_female + age + age2 + age*bin_female + age2*bin_female + edu_years + formal +  sizeFirm + relab + oficio, data = db)
 
-# --- Picos por género ---
-## Usa tu modelo ya estimado:
+# Picos por género
 fit <- model_equality3interaction
 
 co <- coef(fit)
 nm <- names(co)
 
-# Mira los nombres si quieres verificar:
-print(nm)
-
-# Helpers: busca el nombre correcto entre varias variantes
+#Busca el nombre correcto entre varias variantes
 pick1 <- function(cands) {
   hit <- intersect(cands, nm)
   if (length(hit) != 1) stop("No se identificó de forma única: ", paste(cands, collapse=", "))
@@ -252,7 +236,6 @@ b2 <- pick1(c("age"))
 b3 <- pick1(c("age2", "I(age^2)"))
 
 # δ2 (interacción lineal) y δ3 (interacción cuadrática)
-# cubre orden y codificación (numérica o factor con '1')
 d2 <- pick1(c("age:bin_female","bin_female:age","age:bin_female1","bin_female1:age"))
 d3 <- pick1(c("age2:bin_female","bin_female:age2",
               "I(age^2):bin_female","bin_female:I(age^2)",
@@ -265,105 +248,355 @@ a_M <- - (b2 + d2) / (2*(b3 + d3))
 
 c(peak_men = a_H, peak_women = a_M)
 
-# ======================================================
-# Bootstrap para intervalos de confianza de los picos (Edad)
-# ======================================================
-calcular_pico_edad <- function(data, indices) {
-  d <- data[indices, ]
-  fit <- lm(log_wage ~ Edad + Edad2, data = d)
-  coefs <- coef(fit)
-  return(-coefs["Edad"] / (2 * coefs["Edad2"]))
+```
+
+```{r}
+library(ggplot2)
+library(scales)
+
+fit <- model_equality3interaction
+mf  <- model.frame(fit)
+
+# Rango y grid
+age_min <- max(18, floor(min(mf$age, na.rm=TRUE)))
+age_max <- ceiling(max(mf$age, na.rm=TRUE))
+ages    <- seq(age_min, age_max, length.out = 300)
+
+# Fila de referencia (medias/moda)
+most_common <- function(x) names(sort(table(x), decreasing=TRUE))[1]
+ref_row <- as.data.frame(lapply(mf, function(x)
+  if (is.numeric(x)) mean(x, na.rm=TRUE) else factor(most_common(x), levels=levels(x))
+))[1,,drop=FALSE]
+
+# Grids por sexo (factor 2 niveles o 0/1)
+if (is.factor(mf$bin_female)) { lev <- levels(mf$bin_female); male <- lev[1]; female <- lev[2]
+  make_grid <- function(sex) { nd <- ref_row[rep(1, length(ages)),,drop=FALSE]
+    nd$age <- ages; if ("age2"%in%names(nd)) nd$age2 <- ages^2
+    nd$bin_female <- factor(sex, levels=lev); nd }
+} else { male <- 0; female <- 1
+  make_grid <- function(sex) { nd <- ref_row[rep(1, length(ages)),,drop=FALSE]
+    nd$age <- ages; if ("age2"%in%names(nd)) nd$age2 <- ages^2
+    nd$bin_female <- sex; nd }
 }
+grid_m <- make_grid(male); grid_f <- make_grid(female)
 
-# Bootstrap hombres
-set.seed(123)
-boot_hombres_edad <- boot(data = subset(geih_modelo, female == "Hombre"), 
-                          statistic = calcular_pico_edad, R = 1000)
-ci_hombres_edad <- boot.ci(boot_hombres_edad, type = "perc")
-cat("IC 95% para el pico de Edad en Hombres:\n")
-print(ci_hombres_edad)
+# Predicciones (log) -> niveles + IC 95%
+crit <- qnorm(0.975)
+to_levels <- function(pr) data.frame(fit=exp(pr$fit),
+                                     lwr=exp(pr$fit-crit*pr$se.fit),
+                                     upr=exp(pr$fit+crit*pr$se.fit))
+pm <- predict(fit, newdata=grid_m, se.fit=TRUE)
+pf <- predict(fit, newdata=grid_f, se.fit=TRUE)
+plot_data <- rbind(
+  cbind(age=ages, to_levels(pm), group="Hombres"),
+  cbind(age=ages, to_levels(pf), group="Mujeres")
+)
 
-# Bootstrap mujeres
-set.seed(123)
-boot_mujeres_edad <- boot(data = subset(geih_modelo, female == "Mujer"), 
-                          statistic = calcular_pico_edad, R = 1000)
-ci_mujeres_edad <- boot.ci(boot_mujeres_edad, type = "perc")
-cat("IC 95% para el pico de Edad en Mujeres:\n")
-print(ci_mujeres_edad)
+# Picos (con interacciones)
+co <- coef(fit); nm <- names(co)
+b2 <- unname(co["age"])
+b3 <- unname(co[intersect(c("age2","I(age^2)"), nm)][1])
+d2 <- unname(co[intersect(c("age:bin_female","bin_female:age","age:bin_female1","bin_female1:age"), nm)][1])
+d3 <- unname(co[intersect(c("age2:bin_female","bin_female:age2","I(age^2):bin_female","bin_female:I(age^2)",
+                            "age2:bin_female1","bin_female1:age2","I(age^2):bin_female1","bin_female1:I(age^2)"), nm)][1])
+v_m <- max(age_min, min(age_max, - b2/(2*b3)))
+v_f <- max(age_min, min(age_max, - (b2 + d2)/(2*(b3 + d3))))
 
+# Puntos crudos en niveles, color por sexo (sin afectar eje-Y)
+db_pts <- transform(
+  db,
+  group = if (is.factor(bin_female)) factor(bin_female, labels=c("Hombres","Mujeres"))
+          else factor(bin_female, levels=c(0,1), labels=c("Hombres","Mujeres")),
+  wage  = exp(Log_Total_hour_salary)
+)
 
+# Tope del eje-Y tomado de las curvas (no de los puntos)
+y_cap <- max(quantile(plot_data$upr, 0.999, na.rm=TRUE)) * 1.2
 
+# grafico
+cols <- c("Hombres"="#274C77","Mujeres"="#EF6351")
+p <- ggplot(plot_data, aes(age, fit, color=group, linetype=group)) +
+  geom_ribbon(aes(ymin=lwr, ymax=upr, fill=group), alpha=0.20, colour=NA, show.legend=FALSE) +
+  geom_point(data=db_pts, aes(age, wage, color=group),
+             alpha=0.5, size=0.7, stroke=0.4, inherit.aes=FALSE,
+             position=position_jitter(width=0.25, height=0), na.rm=TRUE) +
+  geom_line(linewidth=1.2) +
+  geom_vline(xintercept=v_m, linetype="dashed", color=cols["Hombres"], show.legend=FALSE) +
+  geom_vline(xintercept=v_f, linetype="dashed", color=cols["Mujeres"],  show.legend=FALSE) +
+  coord_cartesian(ylim=c(0, y_cap)) +
+  scale_color_manual(NULL, values=cols) +
+  scale_fill_manual(NULL,  values=cols) +
+  scale_linetype_manual(NULL, values=c("Hombres"="solid","Mujeres"="solid")) +
+  scale_y_continuous(labels=label_number(big.mark=",")) +
+  labs(title="Age-Wage Profile by sex (Fit with controls)",
+       x="Age", y="Hourly Wage (Levels)") +
+  theme_classic(base_size=12) +
+  theme(plot.title=element_text(face="bold"),
+        axis.title=element_text(face="bold"),
+        legend.position="top")
+
+p
+
+ggsave("perfil_edad_salario_controles.jpg", plot = p,
+       width = 8, height = 4.4,
+       dpi = 600)
 
 ```
 
 ```{r}
-fit <- model_equality3
+# Perfiles y Picos por Género (Edad) modelo con controles
 
+model_edad_sex <- lm(Log_Total_hour_salary ~ bin_female + age + age2 + age*bin_female + age2*bin_female, data = db)
 
-# edad^2: toma "age2" si existe; de lo contrario usa "I(age^2)"
-b2 <- coef(fit)["age"]
-b3 <- if ("age2" %in% names(coef(fit))) coef(fit)["age2"] else coef(fit)["I(age^2)"]
-a_star <- -b2/(2*b3)
+# Picos por género
+fit12 <- model_edad_sex
 
-# helper: curva promedio por sexo (0 = hombres, 1 = mujeres)
-pred_curve <- function(sex_level, ages) {
-  sapply(ages, function(a) {
-    nd <- transform(
-      db,
-      bin_female = factor(sex_level, levels = levels(model.frame(fit)$bin_female)),
-      age = a,
-      age2 = a^2
-    )
-    mean(exp(predict(fit, newdata = nd)), na.rm = TRUE)
-  })
+co12 <- coef(fit12)
+nm12 <- names(co12)
+
+#Buscar el nombre correcto entre varias variantes
+pick12 <- function(cands12) {
+  hit12 <- intersect(cands12, nm12)
+  if (length(hit12) != 1) stop("No se identificó de forma única: ", paste(cands12, collapse=", "))
+  unname(co12[hit12])
 }
 
-# rango de edades y curvas
-age_min <- 18
-age_max <- ceiling(max(db$age, na.rm = TRUE))
+# β2 (age) y β3 (age^2 o I(age^2))
+b212 <- pick12(c("age"))
+b312 <- pick12(c("age2", "I(age^2)"))
+
+# δ2 (interacción lineal) y δ3 (interacción cuadrática)
+d212 <- pick12(c("age:bin_female","bin_female:age","age:bin_female1","bin_female1:age"))
+d312 <- pick12(c("age2:bin_female","bin_female:age2",
+              "I(age^2):bin_female","bin_female:I(age^2)",
+              "age2:bin_female1","bin_female1:age2",
+              "I(age^2):bin_female1","bin_female1:I(age^2)"))
+
+# Picos
+a_H12 <- - b212 / (2*b312)
+a_M12 <- - (b212 + d212) / (2*(b312 + d312))
+
+c(peak_men12 = a_H12, peak_women12 = a_M12)
+
+```
+
+```{r}
+# Modelo sin controles
+fit <- model_edad_sex
+mf  <- model.frame(fit)
+
+# Rango y grid
+age_min <- max(18, floor(min(mf$age, na.rm = TRUE)))
+age_max <- ceiling(max(mf$age, na.rm = TRUE))
 ages    <- seq(age_min, age_max, length.out = 300)
 
-w_m <- pred_curve(0, ages)  # hombres
-w_f <- pred_curve(1, ages)  # mujeres
+# Fila de referencia (medias/moda)
+most_common <- function(x) names(sort(table(x), decreasing = TRUE))[1]
+ref_row <- as.data.frame(lapply(mf, function(x)
+  if (is.numeric(x)) mean(x, na.rm = TRUE) else factor(most_common(x), levels = levels(x))
+))[1, , drop = FALSE]
 
-# salarios en la edad pico común
-nd_m_star <- transform(db,
-  bin_female = factor(0, levels = levels(model.frame(fit)$bin_female)),
-  age = a_star, age2 = a_star^2)
-nd_f_star <- transform(db,
-  bin_female = factor(1, levels = levels(model.frame(fit)$bin_female)),
-  age = a_star, age2 = a_star^2)
+# Grids por sexo (factor con 2 niveles o 0/1)
+if (is.factor(mf$bin_female)) {
+  lev <- levels(mf$bin_female); male <- lev[1]; female <- lev[2]
+  make_grid <- function(sex) {
+    nd <- ref_row[rep(1, length(ages)), , drop = FALSE]
+    nd$age <- ages; if ("age2" %in% names(nd)) nd$age2 <- ages^2
+    nd$bin_female <- factor(sex, levels = lev); nd
+  }
+} else {
+  male <- 0; female <- 1
+  make_grid <- function(sex) {
+    nd <- ref_row[rep(1, length(ages)), , drop = FALSE]
+    nd$age <- ages; if ("age2" %in% names(nd)) nd$age2 <- ages^2
+    nd$bin_female <- sex; nd
+  }
+}
+grid_m <- make_grid(male)
+grid_f <- make_grid(female)
 
-w_m_star <- mean(exp(predict(fit, newdata = nd_m_star)), na.rm = TRUE)
-w_f_star <- mean(exp(predict(fit, newdata = nd_f_star)), na.rm = TRUE)
-
-# data para graficar
-curves <- rbind(
-  data.frame(age = ages, wage = w_m, group = "Hombres"),
-  data.frame(age = ages, wage = w_f, group = "Mujeres")
+# predict
+crit <- qnorm(0.975)
+to_levels <- function(pr) data.frame(
+  fit = exp(pr$fit),
+  lwr = exp(pr$fit - crit*pr$se.fit),
+  upr = exp(pr$fit + crit*pr$se.fit)
 )
-peaks <- rbind(
-  data.frame(age = a_star, wage = w_m_star, group = "Hombres"),
-  data.frame(age = a_star, wage = w_f_star, group = "Mujeres")
+pm <- predict(fit, newdata = grid_m, se.fit = TRUE)
+pf <- predict(fit, newdata = grid_f, se.fit = TRUE)
+plot_data <- rbind(
+  cbind(age = ages, to_levels(pm), group = "Hombres"),
+  cbind(age = ages, to_levels(pf), group = "Mujeres")
 )
 
-# brecha en el pico
-gap_abs <- w_m_star - w_f_star
-gap_pct <- 100 * (w_m_star / w_f_star - 1)
+# Picos
+co <- coef(fit); nm <- names(co)
+b2 <- unname(co["age"])
+b3 <- unname(co[intersect(c("age2","I(age^2)"), nm)][1])
+d2 <- unname(co[intersect(c("age:bin_female","bin_female:age","age:bin_female1","bin_female1:age"), nm)][1])
+d3 <- unname(co[intersect(c("age2:bin_female","bin_female:age2",
+                            "I(age^2):bin_female","bin_female:I(age^2)",
+                            "age2:bin_female1","bin_female1:age2",
+                            "I(age^2):bin_female1","bin_female1:I(age^2)"), nm)][1])
+v_m <- max(age_min, min(age_max, - b2/(2*b3)))
+v_f <- max(age_min, min(age_max, - (b2 + d2)/(2*(b3 + d3))))
 
-ggplot(curves, aes(age, wage, linetype = group)) +
-  geom_line(color = "black", linewidth = 1) +
-  geom_segment(aes(x = a_star, xend = a_star, y = w_f_star, yend = w_m_star),
-               color = "grey30", linewidth = 0.7, inherit.aes = FALSE) +
-  geom_point(data = peaks, aes(age, wage), shape = 21, size = 2.6,
-             fill = "white", color = "black", stroke = 0.7, inherit.aes = FALSE) +
-    scale_linetype_manual(NULL, values = c("Hombres" = "solid", "Mujeres" = "dashed")) +
-  scale_x_continuous(limits = c(age_min, age_max), breaks = seq(18, age_max, by = 4)) +
-  labs(title = "Perfil edad–salario por sexo (modelo con controles)",
-       x = "Edad (años)", y = "Salario por hora (niveles)") +
-  theme_classic(base_size = 11) +
+# Puntos crudos en niveles, color por sexo
+db_pts <- transform(
+  db,
+  group = if (is.factor(bin_female)) factor(bin_female, labels = c("Hombres","Mujeres"))
+          else factor(bin_female, levels = c(0,1), labels = c("Hombres","Mujeres")),
+  wage  = exp(Log_Total_hour_salary)
+)
+
+# Tope del eje-Y basado en las curvas (no los puntos)
+y_cap <- max(quantile(plot_data$upr, 0.999, na.rm = TRUE)) * 1.02
+
+# grafico
+cols <- c("Hombres"="#274C77","Mujeres"="#EF6351")
+p2 <- ggplot(plot_data, aes(age, fit, color = group)) +  # líneas sólidas para ambos
+  geom_ribbon(aes(ymin = lwr, ymax = upr, fill = group),
+              alpha = 0.20, colour = NA, show.legend = FALSE) +
+  geom_point(data = db_pts, aes(age, wage, color = group),
+             alpha = 0.5, size = 0.7, stroke = 0.4, inherit.aes = FALSE,
+             position = position_jitter(width = 0.25, height = 0), na.rm = TRUE) +
+  geom_line(linewidth = 1.2) +
+  geom_vline(xintercept = v_m, linetype = "dashed", color = cols["Hombres"], show.legend = FALSE) +
+  geom_vline(xintercept = v_f, linetype = "dashed", color = cols["Mujeres"],  show.legend = FALSE) +
+  coord_cartesian(ylim = c(0, y_cap)) +
+  scale_color_manual(NULL, values = cols) +
+  scale_fill_manual(NULL,  values = cols) +
+  scale_y_continuous(labels = scales::label_number(big.mark = ",")) +
+  labs(title = "Age–Wage Profile by Sex (No controls)",
+       x = "Age", y = "Hourly Wage (levels)") +
+  theme_classic(base_size = 12) +
   theme(plot.title = element_text(face = "bold"),
-        axis.title = element_text(face = "bold"),
+        axis.title  = element_text(face = "bold"),
         legend.position = "top")
+
+ggsave("perfil_edad_salario_nocontroles.jpg", plot = p2,
+       width = 8, height = 4.4,
+       dpi = 600)
+
+
+p2
 ```
+
+
+```{r}
+library(boot)
+
+peak_fn <- function(data, index) {
+  d <- data[index, , drop = FALSE]
+
+  # Asegura levels consistentes en cada réplica
+  if (!is.factor(d$bin_female)) d$bin_female <- factor(d$bin_female, levels = c(0,1))
+
+  fit <- lm(Log_Total_hour_salary ~ bin_female + age + age2 +
+              age*bin_female + age2*bin_female +
+              edu_years + formal + sizeFirm + relab + oficio,
+            data = d)
+
+  co <- coef(fit); nm <- names(co)
+
+  pick1 <- function(cands) {
+    hit <- intersect(cands, nm)
+    if (length(hit) < 1) stop("No se encontró coef para: ", paste(cands, collapse=", "))
+    unname(co[hit[1]])
+  }
+
+  # β2 y β3
+  b2 <- pick1(c("age"))
+  b3 <- pick1(c("age2", "I(age^2)"))
+
+  # δ2 y δ3
+  d2 <- pick1(c("age:bin_female","bin_female:age","age:bin_female1","bin_female1:age"))
+  d3 <- pick1(c("age2:bin_female","bin_female:age2",
+                "I(age^2):bin_female","bin_female:I(age^2)",
+                "age2:bin_female1","bin_female1:age2",
+                "I(age^2):bin_female1","bin_female1:I(age^2)"))
+
+  a_H <- - b2 / (2*b3)
+  a_M <- - (b2 + d2) / (2*(b3 + d3))
+
+  c(peak_men = a_H, peak_women = a_M)   # <-- devolver ambos
+}
+
+# Prueba en muestra original
+peak_fn(db, 1:nrow(db))
+
+# Bootstrap
+set.seed(123)
+boot_out <- boot(db, statistic = peak_fn, R = 1000)
+
+# Resultados
+boot_out$t0                        # c(peak_men, peak_women)
+boot.ci(boot_out, type = "perc", index = 1)  # IC hombres
+boot.ci(boot_out, type = "perc", index = 2)  # IC mujeres
+```
+
+```{r}
+
+model_equality4interaction <- lm(Log_Total_hour_salary ~ bin_female + age + age2 + age*bin_female + age2*bin_female, data = db)
+
+# picos con el modelo nueno
+fit <- model_equality4interaction
+co  <- coef(fit); nm <- names(co)
+
+pick1 <- function(cands) {
+  hit <- intersect(cands, nm)
+  if (length(hit) < 1) stop("no encontré: ", paste(cands, collapse=", "))
+  unname(co[hit[1]])
+}
+
+b2 <- pick1(c("age"))
+b3 <- pick1(c("age2","I(age^2)"))
+d2 <- pick1(c("age:bin_female","bin_female:age","age:bin_female1","bin_female1:age"))
+d3 <- pick1(c("age2:bin_female","bin_female:age2",
+              "I(age^2):bin_female","bin_female:I(age^2)",
+              "age2:bin_female1","bin_female1:age2",
+              "I(age^2):bin_female1","bin_female1:I(age^2)"))
+
+c(peak_men   = - b2 / (2*b3),
+  peak_women = - (b2 + d2) / (2*(b3 + d3)))
+```
+
+```{r}
+# Bootstrap (sin controles)
+peak_fn <- function(data, index) {
+  d <- data[index, , drop = FALSE]
+  if (!is.factor(d$bin_female)) d$bin_female <- factor(d$bin_female, levels = c(0,1))
+
+  fit <- lm(
+    Log_Total_hour_salary ~ bin_female + age + age2 +
+      age*bin_female + age2*bin_female,
+    data = d
+  )
+
+  co <- coef(fit); nm <- names(co)
+  pick1 <- function(cands) { h <- intersect(cands, nm); if (!length(h)) stop("faltan: ", paste(cands, collapse=", ")); unname(co[h[1]]) }
+
+  b2 <- pick1(c("age"))
+  b3 <- pick1(c("age2","I(age^2)"))
+  d2 <- pick1(c("age:bin_female","bin_female:age","age:bin_female1","bin_female1:age"))
+  d3 <- pick1(c("age2:bin_female","bin_female:age2",
+                "I(age^2):bin_female","bin_female:I(age^2)",
+                "age2:bin_female1","bin_female1:age2",
+                "I(age^2):bin_female1","bin_female1:I(age^2)"))
+
+  c(peak_men   = - b2/(2*b3),
+    peak_women = - (b2 + d2)/(2*(b3 + d3)))
+}
+
+# Prueba en muestra original
+peak_fn(db, 1:nrow(db))
+
+set.seed(123)
+boot_out <- boot(db, statistic = peak_fn, R = 1000)
+
+boot_out$t0
+boot.ci(boot_out, type = "perc",  index = 1)  # IC hombres
+boot.ci(boot_out, type = "perc",  index = 2)  # IC mujeres
+```
+
 
