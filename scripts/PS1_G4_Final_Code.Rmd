@@ -1,8 +1,11 @@
 ---
-title: "PS1_G4_Data Exploration"
+title: "Final code"
 author: "Juan José Rojas, Francisco Soler, Jesús Yancy y Juan Otalora"
 date: "2025-08-31"
 output: html_document
+editor_options: 
+  markdown: 
+    wrap: 72
 ---
 
 ```{r}
@@ -18,40 +21,42 @@ p_load(rio, # Import/export data.
        skimr, # Summarize data.
        here, #for file searching
        readr, #for opening files
-       ggplo2,
+       ggplot2,
        boot,
        scales,
-       car
+       car,
+       dplyr,
+       tidyr
        )
 ```
 
 # Database load and initial cleaning
-
 
 ```{r}
 ruta <- here("data", "data.csv")
 db_base <- read_csv(ruta)
 ```
 
-First, we drop all observations with ages < 18. 
-
+First, we drop all observations with ages \< 18.
 
 ```{r}
 # Leave observations with age > 18
-db_base <- db_base |>
+db_base <- db_base %>%
   filter(age >= 18)
 # New database dimensions
 dim(db_base)
 # Number and proportion of minors
 print((32177-24054)/32177)
 ```
-We lost 25.2% of observations that corresponds to the number of minors, leaving us with 24.054 individuals in the data. 
+
+We lost 25.2% of observations that corresponds to the number of minors,
+leaving us with 24.054 individuals in the data.
 
 # Understanding "employment" in the data
 
 ```{r}
 # Create indicators of hours worked and labor salary income
-db_base <- db_base |>
+db_base <- db_base %>%
   mutate(
     bin_ingLab_m     = ifelse(y_ingLab_m > 0, 1, 0),
     bin_ingLab_m_ha  = ifelse(y_ingLab_m_ha > 0, 1, 0),
@@ -70,17 +75,30 @@ table(db_base$bin_hoursWorked, db_base$bin_ing_total) # 250 occupied people repo
 table(db_base$bin_hoursWorked, db_base$bin_ingLab_m_ha) # of the 16397, only 9785 report income from labor
 
 ```
-There's a huge tension between "income" and "wage". The "ocupados" category do not only include what we could consider employed or "empleados" stricly talking, but also self-employed and unpaid family workers.
 
-As the income of independent and self-employed individuals tends to be more sensitive to external factors, while the wages of strictly employed workers are generally more stable and primarily determined by their individual characteristics and skills, we focus our analysis exclusively on predicting the hourly wages of those who report receiving a salary from employment.
+There's a huge tension between "income" and "wage". The "ocupados"
+category do not only include what we could consider employed or
+"empleados" stricly talking, but also self-employed and unpaid family
+workers.
+
+As the income of independent and self-employed individuals tends to be
+more sensitive to external factors, while the wages of strictly employed
+workers are generally more stable and primarily determined by their
+individual characteristics and skills, we focus our analysis exclusively
+on predicting the hourly wages of those who report receiving a salary
+from employment.
 
 ```{r}
 # Limit our sample to predict wages from labor
-db_base <- db_base |>
+db_base <- db_base %>%
   filter(bin_ingLab_m_ha == 1)
 
 ```
-Lastly, in order to remove atypical cases were people were reporting Total hours worked above the percentil 99 or below the percentil 1, we removed those observation from the dataset (Explicar tema de manuel, que el también lo hace y la lógica del why)
+
+Lastly, in order to remove atypical cases were people were reporting
+Total hours worked above the percentil 99 or below the percentil 1, we
+removed those observation from the dataset (Explicar tema de manuel, que
+el también lo hace y la lógica del why)
 
 ```{r}
 
@@ -103,15 +121,21 @@ db_base <- db_base %>%
 
 ```
 
-We got 9.700 people left on our study sample. A limited modelation like this would allow us only to predict wages of people who already report some income labor, so we could aim detect subreporting in tax fillings of employed people, but no vulnerable people who could need assistance.
+We got 9.700 people left on our study sample. A limited modelation like
+this would allow us only to predict wages of people who already report
+some income labor, so we could aim detect subreporting in tax fillings
+of employed people, but no vulnerable people who could need assistance.
 
-Note: There is a problem: How much people is formally employed? How big a problem is subreporting by formal employed people? 
+Note: There is a problem: How much people is formally employed? How big
+a problem is subreporting by formal employed people?
 
-Note 2: We have difficulties ordering the story, because first we talk about tax fraud but then we want to do inference about age and sex. 
+Note 2: We have difficulties ordering the story, because first we talk
+about tax fraud but then we want to do inference about age and sex.
 
 # Characterizing employment
 
-How much of employment is informal? How much it comes from the small businesses (less than 5 employees)?
+How much of employment is informal? How much it comes from the small
+businesses (less than 5 employees)?
 
 ```{r}
 # Factor labels for better reading
@@ -123,7 +147,7 @@ table(db_base$formal, db_base$informal)  # check complementary distrib
 prop.table(table(db_base$formal, db_base$informal)) 
 ```
 
-22.7% of employment is informal, 77.2% is formal. 
+22.7% of employment is informal, 77.2% is formal.
 
 ```{r}
 # Small businesses role:
@@ -131,7 +155,8 @@ table(db_base$microEmpresa) # count employment from small businesses
 prop.table(table(db_base$microEmpresa)) # 
 ```
 
-22.5% employment comes from small businesses, 77.4% comes from businesses with more than 5 employees.
+22.5% employment comes from small businesses, 77.4% comes from
+businesses with more than 5 employees.
 
 ```{r}
 # Are all small businesses informal?
@@ -139,13 +164,11 @@ table(db_base$microEmpresa, db_base$informal)
 prop.table(table(db_base$microEmpresa, db_base$informal)) 
 ```
 
-Majority of employment comes from formal employment in not-small firm. Only 7% comes from formal in small businesses, and a similarly scarce 7% is informal employment in not-small firms
+Majority of employment comes from formal employment in not-small firm.
+Only 7% comes from formal in small businesses, and a similarly scarce 7%
+is informal employment in not-small firms
 
 # Exploring our variables of interest
-library(dplyr)
-library(tidyr)
-library(ggplot2)
-library(stargazer)
 
 ## Income, wages and hours worked
 
@@ -214,6 +237,7 @@ print(g_income$histogramas)
 print(g_income$boxplots)
 stargazer(as.data.frame(db_base[, income_vars]), type = "text")
 ```
+
 ```{r}
 # Salarios por hora
 g_wage <- graficar_variables(db_base, wage_vars, "Salarios por hora")
@@ -234,14 +258,17 @@ stargazer(as.data.frame(db_base[, hours_vars]), type = "text")
 
 ## Creating years of education
 
-Lets start by constructing an approximation to the education level with questions p6210 (which asks for the highest level of education attained) and p6210s1 (which ask about years that were approved). We will count only from elementary school (label p6210=3) to tertiary eduaction (label p6210=6). 
+Lets start by constructing an approximation to the education level with
+questions p6210 (which asks for the highest level of education attained)
+and p6210s1 (which ask about years that were approved). We will count
+only from elementary school (label p6210=3) to tertiary eduaction (label
+p6210=6).
 
-Pseudocode: 
+Pseudocode:
 
-years of education:
-  if p6210 = 1, 2, 9 then put 0
-  if p6210 = 3, 4, 5 then put the number of p6210s
-  if p6210 = 6 then add the number of p6210s + 11 (p.e p6210=6, p6210s1=5 then edu_years = 16)
+years of education: if p6210 = 1, 2, 9 then put 0 if p6210 = 3, 4, 5
+then put the number of p6210s if p6210 = 6 then add the number of
+p6210s + 11 (p.e p6210=6, p6210s1=5 then edu_years = 16)
 
 ```{r}
 # We see the distribution on 
@@ -260,9 +287,12 @@ db_base$edu_years <- ifelse(
 edu_vars<-c("edu_years", "maxEducLevel", "p6210")
 stargazer(as.data.frame(db_base[,edu_vars]), type="text")
 ```
+
 ## Creating Experience
 
-Experience premium is a well-known phenomenon in labor economics. We follow Fernandez and Messima (2018) to construct a potential experience variable substracting `age-years of education-6`
+Experience premium is a well-known phenomenon in labor economics. We
+follow Fernandez and Messima (2018) to construct a potential experience
+variable substracting `age-years of education-6`
 
 ```{r}
 # Create experience var
@@ -288,7 +318,8 @@ youngs <- db_base %>%
 stargazer(as.data.frame(youngs[,"exp"]), type="text")
 rm(youngs)
 ```
-## Exploring characteristivs
+
+## Exploring characteristics
 
 ```{r}
 dem_vars <- c("age", "sex", "estrato1", "maxEducLevel", "college", "edu_years", "exp")
@@ -312,7 +343,7 @@ stargazer(as.data.frame(db_base[,ocu_vars]), type="text")
 
 ```{r}
 
-db_base <- db_base|>
+db_base <- db_base %>%
   mutate(Log_Total_hour_salary=log(db_base$y_ingLab_m_ha))
 
 db = db_base |> select(Log_Total_hour_salary, ingtot, y_ingLab_m, y_salary_m, y_salarySec_m, y_ingLab_m_ha, y_salary_m_hu, y_salarySec_m_ha, totalHoursWorked, hoursWorkUsual, hoursWorkActualSecondJob, age, sex, estrato1, maxEducLevel, college, edu_years, exp, oficio, relab, formal, microEmpresa, regSalud, sizeFirm, p6240, ocu, dsi)
@@ -320,7 +351,7 @@ db = db_base |> select(Log_Total_hour_salary, ingtot, y_ingLab_m, y_salary_m, y_
 write.csv(db, "db_clean1.csv")
 
 
-db <- db |>
+db <- db %>%
   mutate(across(
     c(formal, sizeFirm, relab, oficio),
     ~ as.factor(.)
@@ -328,11 +359,16 @@ db <- db |>
 
 ```
 
-## 3. Age-wage profile.
+## 3. Age-wage profile
 
-A great deal of evidence in labor economics suggests that the typical worker’s age-wage profile has a predictable path: “Wages tend to be low when the worker is young; they rise as the worker ages, peaking at about age 50; and the wage rate tends to remain stable or decline slightly after age 50”.
+A great deal of evidence in labor economics suggests that the typical
+worker’s age-wage profile has a predictable path: “Wages tend to be low
+when the worker is young; they rise as the worker ages, peaking at about
+age 50; and the wage rate tends to remain stable or decline slightly
+after age 50”.
 
-In this subsection we are going to estimate the Age-wage profile profile for the individuals in this sample:
+In this subsection we are going to estimate the Age-wage profile profile
+for the individuals in this sample:
 
 $$ log(w) = β_1 + β_2Age+ β_3Age^2 + u $$
 
@@ -349,14 +385,22 @@ stargazer(model_age, type = "text")
 
 ### Interpretación
 
-$\beta_2>0$ y $\beta_3<0$ confirman una trayectoria cóncava:$\partial\ln w/\partial \text{age}=\beta_2+2\beta_3\text{age}$ es positiva a edades tempranas y decrece con la edad.
+$\beta_2>0$ y $\beta_3<0$ confirman una trayectoria
+cóncava:$\partial\ln w/\partial \text{age}=\beta_2+2\beta_3\text{age}$
+es positiva a edades tempranas y decrece con la edad.
 
-La estimación del perfil edad–salario muestra un coeficiente positivo para la edad (0.069) y un coeficiente negativo para la edad al cuadrado (-0.001), ambos estadísticamente significativos al 1%. Esto implica que los salarios horarios aumentan con la edad, pero a un ritmo decreciente, confirmando la forma cóncava predicha por la teoría de capital humano.
+La estimación del perfil edad–salario muestra un coeficiente positivo
+para la edad (0.069) y un coeficiente negativo para la edad al cuadrado
+(-0.001), ambos estadísticamente significativos al 1%. Esto implica que
+los salarios horarios aumentan con la edad, pero a un ritmo decreciente,
+confirmando la forma cóncava predicha por la teoría de capital humano.
 
-### Ajuste en muestra 
+### Ajuste en muestra
 
-El $R^2=0.047$ es esperable en este tipo de estimaciones: la variación no explicada suele residir en educación, ocupación, sector, horas y otros controles no modelados. Que el ajuste sea bajo no invalida el hallazgo central sobre la forma del perfil (Mincer, 1974).  
-
+El $R^2=0.047$ es esperable en este tipo de estimaciones: la variación
+no explicada suele residir en educación, ocupación, sector, horas y
+otros controles no modelados. Que el ajuste sea bajo no invalida el
+hallazgo central sobre la forma del perfil (Mincer, 1974).
 
 ## Peak age
 
@@ -378,10 +422,18 @@ La edad que maximiza el salario esperado es
 
 $age^*=-\frac{\hat\beta_2}{2\hat\beta_3}=\mathbf{45.2}\ \text{años}.$
 
-Para la muestra original, la edad del máximo es 45.2 años y, a partir de un bootstrap no paramétrico con 1,000 réplicas, obtenemos el intervalo percentil 95% $[44.07,\ 46.65]$. Esto sitúa el pico de salario por hora de manera estadísticamente precisa en la segunda mitad de los 40s, coherente con la acumulación temprana de capital humano y retornos decrecientes conforme aumentan los años. La Figura x (perfil estimado) muestra la pendiente positiva inicial, el aplanamiento alrededor del pico y una ligera caída posterior, tal como documentan los perfiles edad–salario clásicos.  
+Para la muestra original, la edad del máximo es 45.2 años y, a partir de
+un bootstrap no paramétrico con 1,000 réplicas, obtenemos el intervalo
+percentil 95% $[44.07,\ 46.65]$. Esto sitúa el pico de salario por hora
+de manera estadísticamente precisa en la segunda mitad de los 40s,
+coherente con la acumulación temprana de capital humano y retornos
+decrecientes conforme aumentan los años. La Figura x (perfil estimado)
+muestra la pendiente positiva inicial, el aplanamiento alrededor del
+pico y una ligera caída posterior, tal como documentan los perfiles
+edad–salario clásicos.
 
 ```{r}
-
+# GRÁFICA
 peak_logw <- peak_salary
 peak_salary_lvl <- exp(peak_logw)
 peak_salary_lab <- format(peak_salary_lvl, big.mark = ",", decimal.mark = ".", scientific = FALSE, trim = TRUE)
@@ -451,25 +503,20 @@ boot_out             # resumen del bootstrap
 boot.ci(boot_out, type = "perc")
 ```
 
-Nota metodológica (bootstrap). El intervalo se construyó con el método percentil, re-muestreando individuos con reemplazo, re-estimando $\hat age^$ en cada réplica y leyendo los cuantiles 2.5% y 97.5%.
+Nota metodológica (bootstrap). El intervalo se construyó con el método
+percentil, re-muestreando individuos con reemplazo, re-estimando
+$\hat age^$ en cada réplica y leyendo los cuantiles 2.5% y 97.5%.
 
+# 4. Equal pay for equal job
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
-```{r}
-
-```
-## 4. Equal pay for equal job
-
-
-# Unconditional Gender-Wage GAP
+## Unconditional Gender-Wage GAP
 
 $$ log(w) = β_1 + β_2Female + u $$
-
 
 ```{r}
 # Create indicator of female
 
-db <- db |>
+db <- db %>%
   mutate(bin_female = 1 - sex)
 
 db$bin_female <- as.factor(db$bin_female)
@@ -484,13 +531,20 @@ stargazer(model_sex, type = "text")
 
 ```
 
-The unconditional regression indicates that women earn, on average, about 4.7 percent less per hour than men. This gap is estimated without controlling for any observable characteristics, so it reflects the raw difference in average hourly wages between the two groups. In other words, the coefficient captures the unconditional gender wage gap in log-wage terms.
+The unconditional regression indicates that women earn, on average,
+about 4.7 percent less per hour than men. This gap is estimated without
+controlling for any observable characteristics, so it reflects the raw
+difference in average hourly wages between the two groups. In other
+words, the coefficient captures the unconditional gender wage gap in
+log-wage terms.
 
 # Equal Pay for Equal Work?
 
-We need to control for: - Similar worker characteristics: Education (edu years, max level, college), age or experience.
+We need to control for: - Similar worker characteristics: Education (edu
+years, max level, college), age or experience.
 
--   Similar job nature characteristics: formality (formal), size of the business (sizeFirm), Public-private sector (relab) 
+-   Similar job nature characteristics: formality (formal), size of the
+    business (sizeFirm), Public-private sector (relab)
 
 -   Similar job role characteristics: occupation (oficio)
 
@@ -522,7 +576,7 @@ db %>%
               statistic = all_continuous() ~ "{mean} ({sd})",
               digits = all_continuous() ~ 2) %>%
   add_n() %>%           # agrega N por grupo
-  add_p()               # prueba de diferencia (opcional)
+  add_p()               # prueba de diferencia
 
 ```
 
@@ -605,7 +659,6 @@ boot.ci(results, type = "perc")
 
 ```
 
-
 ```{R}
 # Perfiles y Picos por Género (Edad) modelo con controles
 db$bin_female <- as.factor(as.character(db$bin_female))
@@ -643,7 +696,6 @@ a_M <- - (b2 + d2) / (2*(b3 + d3))
 c(peak_men = a_H, peak_women = a_M)
 ```
 
-
 ```{R}
 #Determinacion de la diferencia estadistica de los picos
 # Error estándar del pico hombres
@@ -675,6 +727,7 @@ p_value
 ```
 
 ```{r}
+# Gráfica
 
 fit <- model_equality3interaction
 mf  <- model.frame(fit)
@@ -767,6 +820,7 @@ ggsave("perfil_edad_salario_controles.jpg", plot = p,
 
 ```{r}
 
+# IC with bootstrap
 peak_fn <- function(data, index) {
   d <- data[index, , drop = FALSE]
 
@@ -815,7 +869,6 @@ boot_out$t0                        # c(peak_men, peak_women)
 boot.ci(boot_out, type = "perc", index = 1)  # IC hombres
 boot.ci(boot_out, type = "perc", index = 2)  # IC mujeres
 ```
-
 
 ```{r}
 # Perfiles y Picos por Género (Edad) modelo SIN controles
@@ -954,7 +1007,6 @@ ggsave("perfil_edad_salario_nocontroles.jpg", plot = p2,
        dpi = 600)
 ```
 
-
 ```{r}
 # Bootstrap (sin controles)
 peak_fns <- function(data, index) {
@@ -992,7 +1044,8 @@ boot_outs$t0
 boot.ci(boot_outs, type = "perc",  index = 1)  # IC hombres
 boot.ci(boot_outs, type = "perc",  index = 2)  # IC mujeres
 ```
-##Punto 5
+
+# 5. Predict
 
 ```{r}
 db <- db %>%
@@ -1055,6 +1108,8 @@ form_M4 <- Log_Total_hour_salary ~ poly(age, 4, raw=TRUE) + bin_female + poly(ex
 form_M5 <- Log_Total_hour_salary ~ poly(exp, 7, raw=TRUE) + oficio + oficio*exp
 
 ```
+
+## Entrenando los modelos
 
 ```{r}
 set.seed(10101)
@@ -1192,12 +1247,9 @@ tabla_modelos
 
 
 ```
-La estimación con el menor RMSE fue la especificación adicional #4, el cual es el modelo con el mayor número de variables y complejidades
 
-```{r}
-
-```
-
+La estimación con el menor RMSE fue la especificación adicional #4, el
+cual es el modelo con el mayor número de variables y complejidades
 
 ```{r}
 
@@ -1230,5 +1282,3 @@ scores_LOOCV <- c()
 scores_LOOCV  
 
 ```
-
-
