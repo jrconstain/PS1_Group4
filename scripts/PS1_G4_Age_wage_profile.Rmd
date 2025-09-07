@@ -13,8 +13,8 @@ knitr::opts_chunk$set(echo = TRUE)
 library(here)
 library(readr)
 
-ruta <- here("data", "db_clean2.csv")
-df <- read_csv(ruta)
+ruta <- here("scripts", "db_clean1.csv")
+db <- read_csv(ruta)
 ```
 
 ```{r}
@@ -40,12 +40,12 @@ In this subsection we are going to estimate the Age-wage profile profile for the
 $$ log(w) = β_1 + β_2Age+ β_3Age^2 + u $$
 
 ```{r}
-df <- df %>%
+db <- db %>%
   mutate(age2 = age^2)
 ```
 
 ```{r}
-model_age <- lm(Log_Total_hour_salary ~ age + age2, data = df)
+model_age <- lm(Log_Total_hour_salary ~ age + age2, data = db)
 
 stargazer(model_age, type = "text")
 ```
@@ -54,11 +54,11 @@ stargazer(model_age, type = "text")
 
 $\beta_2>0$ y $\beta_3<0$ confirman una trayectoria cóncava:$\partial\ln w/\partial \text{age}=\beta_2+2\beta_3\text{age}$ es positiva a edades tempranas y decrece con la edad.
 
-La estimación del perfil edad–salario muestra un coeficiente positivo para la edad (0.067) y un coeficiente negativo para la edad al cuadrado (-0.001), ambos estadísticamente significativos al 1%. Esto implica que los salarios horarios aumentan con la edad, pero a un ritmo decreciente, confirmando la forma cóncava predicha por la teoría de capital humano.
+La estimación del perfil edad–salario muestra un coeficiente positivo para la edad (0.069) y un coeficiente negativo para la edad al cuadrado (-0.001), ambos estadísticamente significativos al 1%. Esto implica que los salarios horarios aumentan con la edad, pero a un ritmo decreciente, confirmando la forma cóncava predicha por la teoría de capital humano.
 
 ### Ajuste en muestra 
 
-El $R^2=0.044$ es esperable en este tipo de estimaciones: la variación no explicada suele residir en educación, ocupación, sector, horas y otros controles no modelados. Que el ajuste sea bajo no invalida el hallazgo central sobre la forma del perfil (Mincer, 1974).  
+El $R^2=0.047$ es esperable en este tipo de estimaciones: la variación no explicada suele residir en educación, ocupación, sector, horas y otros controles no modelados. Que el ajuste sea bajo no invalida el hallazgo central sobre la forma del perfil (Mincer, 1974).  
 
 
 ## Peak age
@@ -79,67 +79,54 @@ exp(peak_salary)
 
 La edad que maximiza el salario esperado es
 
-$age^*=-\frac{\hat\beta_2}{2\hat\beta_3}=\mathbf{45.33}\ \text{años}.$
+$age^*=-\frac{\hat\beta_2}{2\hat\beta_3}=\mathbf{45.2}\ \text{años}.$
 
-Para la muestra original, la edad del máximo es 45.3 años y, a partir de un bootstrap no paramétrico con 1,000 réplicas, obtenemos sesgo ≈ 0.034, EE ≈ 0.699, e intervalo percentil 95% $[44.20,\ 46.84]$. Esto sitúa el pico de salario por hora de manera estadísticamente precisa en la segunda mitad de los 40s, coherente con la acumulación temprana de capital humano y retornos decrecientes conforme aumentan los años. La Figura x (perfil estimado) muestra la pendiente positiva inicial, el aplanamiento alrededor del pico y una ligera caída posterior, tal como documentan los perfiles edad–salario clásicos.  
+Para la muestra original, la edad del máximo es 45.2 años y, a partir de un bootstrap no paramétrico con 1,000 réplicas, obtenemos el intervalo percentil 95% $[44.07,\ 46.65]$. Esto sitúa el pico de salario por hora de manera estadísticamente precisa en la segunda mitad de los 40s, coherente con la acumulación temprana de capital humano y retornos decrecientes conforme aumentan los años. La Figura x (perfil estimado) muestra la pendiente positiva inicial, el aplanamiento alrededor del pico y una ligera caída posterior, tal como documentan los perfiles edad–salario clásicos.  
 
 ```{r}
 library(ggplot2)
 
-# Coefs y pico
-coefs <- coef(model_age)
-b1 <- coefs["(Intercept)"]; b2 <- coefs["age"]; b3 <- coefs["age2"]
-
-peak_age  <- -b2 / (2*b3)
-peak_logw <- b1 + b2*peak_age + b3*peak_age^2
+peak_logw <- peak_salary
 peak_salary_lvl <- exp(peak_logw)
 peak_salary_lab <- format(peak_salary_lvl, big.mark = ",", decimal.mark = ".", scientific = FALSE, trim = TRUE)
 
-# Edades
 age_min <- 18
 age_max <- ceiling(max(df$age, na.rm = TRUE))
 age_seq <- seq(age_min, age_max, length.out = 400)
 newdat  <- data.frame(age = age_seq, age2 = age_seq^2)
 
-# Niveles
 pred <- predict(model_age, newdata = newdat, se.fit = TRUE)
 crit <- qnorm(0.975)
+plot_data <- data.frame(
+  age = age_seq,
+  fit = exp(pred$fit),
+  lwr = exp(pred$fit - crit*pred$se.fit),
+  upr = exp(pred$fit + crit*pred$se.fit)
+)
 
-fit_lvl <- exp(pred$fit)
-lwr_lvl <- exp(pred$fit - crit*pred$se.fit)
-upr_lvl <- exp(pred$fit + crit*pred$se.fit)
+label_text <- "Age: 45.2 years\nWage: $7,248 hourly"
+label_x    <- peak_age
+label_y    <- peak_salary_lvl + 0.04*diff(range(plot_data$fit, na.rm = TRUE))
 
-plot_data <- data.frame(age = age_seq, fit = fit_lvl, lwr = lwr_lvl, upr = upr_lvl)
-peak_point <- data.frame(age = peak_age, lvl = peak_salary_lvl)
-
-# Gráfico
 p <- ggplot(plot_data, aes(x = age, y = fit)) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr), fill = "grey80", alpha = 0.35, colour = NA) +
   geom_line(color = "black", linewidth = 1.0) +
   geom_vline(xintercept = peak_age, linetype = "dashed", color = "grey35", linewidth = 0.6) +
-  geom_point(data = peak_point, aes(y = lvl),
-             shape = 21, size = 2.8, stroke = 0.7, fill = "white", color = "black") +
-  geom_label(
-    data = peak_point,
-    aes(y = lvl, label = sprintf("Edad: %.1f años\nSalario: %s", peak_age, peak_salary_lab)),
-    nudge_x = 0.02*(age_max - age_min), nudge_y = 0.04*diff(range(plot_data$fit, na.rm = TRUE)),
-    label.size = 0, fill = "white", size = 3.2, hjust = 0, vjust = 0.4
-  ) +
+  annotate("point", x = peak_age, y = peak_salary_lvl,
+           shape = 21, size = 2.8, stroke = 0.7, fill = "white", color = "black") +
+  annotate("label", x = label_x, y = label_y, label = label_text,
+           label.size = 0, fill = "white", size = 3.2, hjust = 0) +
   scale_x_continuous(limits = c(age_min, age_max), breaks = seq(18, age_max, by = 4)) +
   scale_y_continuous(expand = expansion(mult = c(0.02, 0.06))) +
-  labs(
-    title = "Perfil edad–salario estimado",
-    x = "Edad (años)",
-    y = "Salario por hora (niveles)"
-  ) +
+  labs(title = "Age-Wage Profile",
+       x = "Age", y = "Hourly Wage (Levels)") +
   theme_classic(base_size = 11) +
-  theme(
-    plot.title = element_text(face = "bold"),
-    axis.title = element_text(face = "bold"),
-    axis.line  = element_line(color = "black"),
-    axis.ticks = element_line(color = "black")
-  )
-
+  theme(plot.title = element_text(face = "bold"),
+        axis.title = element_text(face = "bold"),
+        axis.line  = element_line(color = "black"),
+        axis.ticks = element_line(color = "black"))
 p
+
 ```
 
 ## Calcular los intervalos de confianza del peak age con bootstrap
@@ -154,11 +141,11 @@ peak_fn <- function(data, index) {
 }
 
 # Se prueba en la muestra original
-peak_fn(df, 1:nrow(df))
+peak_fn(db, 1:nrow(db))
 
 # bootstrap con 1000 réplicas
 set.seed(123)
-boot_out <- boot(df, statistic = peak_fn, R = 1000)
+boot_out <- boot(db, statistic = peak_fn, R = 1000)
 
 # resultados
 boot_out$t0          # peak age de la muestra original
