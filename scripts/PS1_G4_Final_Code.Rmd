@@ -1,0 +1,1234 @@
+---
+title: "PS1_G4_Data Exploration"
+author: "Juan José Rojas, Francisco Soler, Jesús Yancy y Juan Otalora"
+date: "2025-08-31"
+output: html_document
+---
+
+```{r}
+library(pacman)
+
+p_load(rio, # Import/export data.
+       tidyverse, # Tidy-data.
+       stargazer, # Descriptive statistics.
+       gt, # Descriptive statistics.
+       gtsummary,
+       caret, # For predictive model assessment.
+       gridExtra, # Arrange plots.
+       skimr, # Summarize data.
+       here, #for file searching
+       readr, #for opening files
+       ggplo2,
+       boot,
+       scales,
+       car
+       )
+```
+
+# Database load and initial cleaning
+
+
+```{r}
+ruta <- here("data", "data.csv")
+db_base <- read_csv(ruta)
+```
+
+First, we drop all observations with ages < 18. 
+
+
+```{r}
+# Leave observations with age > 18
+db_base <- db_base |>
+  filter(age >= 18)
+# New database dimensions
+dim(db_base)
+# Number and proportion of minors
+print((32177-24054)/32177)
+```
+We lost 25.2% of observations that corresponds to the number of minors, leaving us with 24.054 individuals in the data. 
+
+# Understanding "employment" in the data
+
+```{r}
+# Create indicators of hours worked and labor salary income
+db_base <- db_base |>
+  mutate(
+    bin_ingLab_m     = ifelse(y_ingLab_m > 0, 1, 0),
+    bin_ingLab_m_ha  = ifelse(y_ingLab_m_ha > 0, 1, 0),
+    bin_hoursWorked  = ifelse(totalHoursWorked > 0, 1, 0),
+    bin_ing_total  = ifelse(ingtot > 0, 1, 0),
+  )
+
+# See the distribution of "occupied" and those who have worked the previous week
+table(db_base$dsi) # How many "desempleados" (unmeployed)
+table(db_base$ocu) # How "ocupados" (include independents, "cuenta propia")
+table(db_base$ocu,db_base$dsi) # All occupied are not unemployed, but not all unoccupied are unemployed
+
+# How it relates with hours workers and income
+table(db_base$bin_hoursWorked, db_base$ocu) # ocu equivalent to hours worked > 0
+table(db_base$bin_hoursWorked, db_base$bin_ing_total) # 250 occupied people report 0 income
+table(db_base$bin_hoursWorked, db_base$bin_ingLab_m_ha) # of the 16397, only 9785 report income from labor
+
+```
+There's a huge tension between "income" and "wage". The "ocupados" category do not only include what we could consider employed or "empleados" stricly talking, but also self-employed and unpaid family workers.
+
+As the income of independent and self-employed individuals tends to be more sensitive to external factors, while the wages of strictly employed workers are generally more stable and primarily determined by their individual characteristics and skills, we focus our analysis exclusively on predicting the hourly wages of those who report receiving a salary from employment.
+
+```{r}
+# Limit our sample to predict wages from labor
+db_base <- db_base |>
+  filter(bin_ingLab_m_ha == 1)
+
+```
+Lastly, in order to remove atypical cases were people were reporting Total hours worked above the percentil 99 or below the percentil 1, we removed those observation from the dataset (Explicar tema de manuel, que el también lo hace y la lógica del why)
+
+```{r}
+
+# Calcular percentiles 1 y 99
+low <- quantile(db_base$totalHoursWorked, probs = 0.01, na.rm = TRUE)
+up  <- quantile(db_base$totalHoursWorked, probs = 0.99, na.rm = TRUE)
+
+# Etiquetar outliers
+db_base <- db_base %>%
+  mutate(out_totalHoursWorked = ifelse(totalHoursWorked < low | totalHoursWorked > up, 1, 0))
+
+# Filtrar los outliers por separado (para conocer su comportamiento)
+db_base_outliers <- db_base %>%
+  filter(out_totalHoursWorked == 1)
+
+
+# Filtrar los outliers de mi base final
+db_base <- db_base %>%
+  filter(out_totalHoursWorked == 0)
+
+```
+
+We got 9.700 people left on our study sample. A limited modelation like this would allow us only to predict wages of people who already report some income labor, so we could aim detect subreporting in tax fillings of employed people, but no vulnerable people who could need assistance.
+
+Note: There is a problem: How much people is formally employed? How big a problem is subreporting by formal employed people? 
+
+Note 2: We have difficulties ordering the story, because first we talk about tax fraud but then we want to do inference about age and sex. 
+
+# Characterizing employment
+
+How much of employment is informal? How much it comes from the small businesses (less than 5 employees)?
+
+```{r}
+# Factor labels for better reading
+db_base$microEmpresa <- factor(db_base$microEmpresa, labels = c("No Small", "Small"))
+db_base$informal <- factor(db_base$informal, labels = c("Formal", "Informal"))
+
+# Informality:
+table(db_base$formal, db_base$informal)  # check complementary distrib
+prop.table(table(db_base$formal, db_base$informal)) 
+```
+
+22.7% of employment is informal, 77.2% is formal. 
+
+```{r}
+# Small businesses role:
+table(db_base$microEmpresa) # count employment from small businesses
+prop.table(table(db_base$microEmpresa)) # 
+```
+
+22.5% employment comes from small businesses, 77.4% comes from businesses with more than 5 employees.
+
+```{r}
+# Are all small businesses informal?
+table(db_base$microEmpresa, db_base$informal)
+prop.table(table(db_base$microEmpresa, db_base$informal)) 
+```
+
+Majority of employment comes from formal employment in not-small firm. Only 7% comes from formal in small businesses, and a similarly scarce 7% is informal employment in not-small firms
+
+# Exploring our variables of interest
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(stargazer)
+
+## Income, wages and hours worked
+
+```{r}
+# Create hourly wage from second occupation
+db_base$y_salarySec_m_ha <- with(
+  db_base,
+  ifelse(is.na(hoursWorkActualSecondJob) | hoursWorkActualSecondJob <= 0,
+         NA,
+         y_salarySec_m / (hoursWorkActualSecondJob * (30 / 7))
+  )
+)
+
+table(db_base$y)
+income_vars <- c("ingtot", "y_ingLab_m", "y_salary_m", "y_salarySec_m")
+wage_vars   <- c("y_ingLab_m_ha", "y_salary_m_hu", "y_salarySec_m_ha")
+hours_vars  <- c("totalHoursWorked", "hoursWorkUsual", "hoursWorkActualSecondJob")
+
+                 
+# Explore statistics
+base_theme <- theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(face = "bold", size = 13, margin = margin(b = 6)),
+    axis.title = element_text(size = 11),
+    strip.text = element_text(face = "bold"),
+    panel.grid.minor = element_blank()
+  )
+
+
+# Función general para graficar un conjunto de variables
+graficar_variables <- function(db, vars, titulo = "Distribución", bins = 30) {
+
+  db_long <- db %>%
+    dplyr::select(all_of(vars)) %>%
+    pivot_longer(cols = everything(), names_to = "variable", values_to = "valor") %>%
+    filter(is.finite(valor))
+  
+  # Histograma + densidad
+ p1 <- ggplot(db_long, aes(x = valor)) +
+    geom_histogram(aes(y = after_stat(density)),
+                   bins = bins, fill = "steelblue", color = "white", alpha = 0.7) +
+    geom_density(color = "darkred", linewidth = 0.4, na.rm = TRUE) +
+    facet_wrap(~ variable, scales = "free", ncol = 2) +
+    labs(
+      title = paste(titulo, "- Histogramas y Densidad"),
+      x = "Valor", y = "Densidad"
+    ) +
+    base_theme
+  
+  # Boxplots
+  p2 <- ggplot(db_long, aes(x = variable, y = valor)) +
+    geom_boxplot(fill = "steelblue", outlier.color = "orange", width = 0.7) +
+    coord_flip() +
+    labs(
+      title = paste(titulo, "- Boxplots"),
+      x = "Variable", y = "Valor"
+    ) +
+    base_theme
+
+  list(histogramas = p1, boxplots = p2)
+}
+
+# Ingresos
+g_income <- graficar_variables(db_base, income_vars, "Ingresos")
+print(g_income$histogramas)
+print(g_income$boxplots)
+stargazer(as.data.frame(db_base[, income_vars]), type = "text")
+```
+```{r}
+# Salarios por hora
+g_wage <- graficar_variables(db_base, wage_vars, "Salarios por hora")
+print(g_wage$histogramas)
+print(g_wage$boxplots)
+stargazer(as.data.frame(db_base[, wage_vars]), type = "text")
+```
+
+```{r}
+# Horas trabajadas
+g_hours <- graficar_variables(db_base, hours_vars, "Horas trabajadas")
+print(g_hours$histogramas)
+print(g_hours$boxplots)
+stargazer(as.data.frame(db_base[, hours_vars]), type = "text")
+```
+
+# Characteristics of individuals and jobs
+
+## Creating years of education
+
+Lets start by constructing an approximation to the education level with questions p6210 (which asks for the highest level of education attained) and p6210s1 (which ask about years that were approved). We will count only from elementary school (label p6210=3) to tertiary eduaction (label p6210=6). 
+
+Pseudocode: 
+
+years of education:
+  if p6210 = 1, 2, 9 then put 0
+  if p6210 = 3, 4, 5 then put the number of p6210s
+  if p6210 = 6 then add the number of p6210s + 11 (p.e p6210=6, p6210s1=5 then edu_years = 16)
+
+```{r}
+# We see the distribution on 
+table(db_base$p6210s1[db_base$p6210 == 6])
+table(db_base$p6210s1[db_base$p6210 == 4])
+
+# Create years of education
+db_base$edu_years <- ifelse(
+  db_base$p6210 %in% c(1, 2, 9), 0,                   # None, Preschool, Unknown → 0
+  ifelse(
+    db_base$p6210 %in% c(3, 4, 5), db_base$p6210s1,        # Primary or Secondary → as is
+    ifelse(db_base$p6210 == 6, db_base$p6210s1 + 11, NA)   # Tertiary → add 11
+  )
+)
+
+edu_vars<-c("edu_years", "maxEducLevel", "p6210")
+stargazer(as.data.frame(db_base[,edu_vars]), type="text")
+```
+## Creating Experience
+
+Experience premium is a well-known phenomenon in labor economics. We follow Fernandez and Messima (2018) to construct a potential experience variable substracting `age-years of education-6`
+
+```{r}
+# Create experience var
+db_base <- db_base %>%
+  mutate(exp = age - edu_years - 6)
+stargazer(as.data.frame(db_base[,"exp"]), type="text") # some people have negative experience (not possible)
+
+sum(db_base$age < db_base$edu_years + 6, na.rm = TRUE)
+inconsistent_age <- db_base %>%
+  filter(age < edu_years + 6) %>%
+  select(age, edu_years)  # There are not implausible cases, as some people could be early promoted (31 cases)
+stargazer(as.data.frame(inconsistent_age[,"age"]), type="text") 
+rm(inconsistent_age)
+
+# We will impute 0 years to those 31 cases as most of them are around 21 years old
+db_base$exp <- ifelse(db_base$exp < 0, 0, db_base$exp)
+stargazer(as.data.frame(db_base[,"exp"]), type="text")
+
+# Removing oldest people
+youngs <- db_base %>%
+  filter(age <  65) %>%
+  select(age, edu_years, exp)
+stargazer(as.data.frame(youngs[,"exp"]), type="text")
+rm(youngs)
+```
+## Exploring characteristivs
+
+```{r}
+dem_vars <- c("age", "sex", "estrato1", "maxEducLevel", "college", "edu_years", "exp")
+                 
+ocu_vars <- c("oficio", "relab", "regSalud", "sizeFirm")
+
+
+g_dem <- graficar_variables(db_base, dem_vars, "Demographics")
+print(g_dem$histogramas)
+print(g_dem$boxplots)
+stargazer(as.data.frame(db_base[,dem_vars]), type="text") 
+
+```
+
+```{r}
+g_ocu <- graficar_variables(db_base, ocu_vars, "Job characteristics")
+print(g_ocu$histogramas)
+print(g_ocu$boxplots)
+stargazer(as.data.frame(db_base[,ocu_vars]), type="text") 
+```
+
+```{r}
+
+db_base <- db_base|>
+  mutate(Log_Total_hour_salary=log(db_base$y_ingLab_m_ha))
+
+db = db_base |> select(Log_Total_hour_salary, ingtot, y_ingLab_m, y_salary_m, y_salarySec_m, y_ingLab_m_ha, y_salary_m_hu, y_salarySec_m_ha, totalHoursWorked, hoursWorkUsual, hoursWorkActualSecondJob, age, sex, estrato1, maxEducLevel, college, edu_years, exp, oficio, relab, formal, microEmpresa, regSalud, sizeFirm, p6240, ocu, dsi)
+
+write.csv(db, "db_clean1.csv")
+
+
+db <- db |>
+  mutate(across(
+    c(formal, sizeFirm, relab, oficio),
+    ~ as.factor(.)
+  ))
+
+```
+
+## 3. Age-wage profile.
+
+A great deal of evidence in labor economics suggests that the typical worker’s age-wage profile has a predictable path: “Wages tend to be low when the worker is young; they rise as the worker ages, peaking at about age 50; and the wage rate tends to remain stable or decline slightly after age 50”.
+
+In this subsection we are going to estimate the Age-wage profile profile for the individuals in this sample:
+
+$$ log(w) = β_1 + β_2Age+ β_3Age^2 + u $$
+
+```{r}
+db <- db %>%
+  mutate(age2 = age^2)
+```
+
+```{r}
+model_age <- lm(Log_Total_hour_salary ~ age + age2, data = db)
+
+stargazer(model_age, type = "text")
+```
+
+### Interpretación
+
+$\beta_2>0$ y $\beta_3<0$ confirman una trayectoria cóncava:$\partial\ln w/\partial \text{age}=\beta_2+2\beta_3\text{age}$ es positiva a edades tempranas y decrece con la edad.
+
+La estimación del perfil edad–salario muestra un coeficiente positivo para la edad (0.069) y un coeficiente negativo para la edad al cuadrado (-0.001), ambos estadísticamente significativos al 1%. Esto implica que los salarios horarios aumentan con la edad, pero a un ritmo decreciente, confirmando la forma cóncava predicha por la teoría de capital humano.
+
+### Ajuste en muestra 
+
+El $R^2=0.047$ es esperable en este tipo de estimaciones: la variación no explicada suele residir en educación, ocupación, sector, horas y otros controles no modelados. Que el ajuste sea bajo no invalida el hallazgo central sobre la forma del perfil (Mincer, 1974).  
+
+
+## Peak age
+
+```{r}
+# Extraer coeficientes
+coefs <- coef(model_age)
+b2 <- coefs["age"]
+b3 <- coefs["age2"]
+
+peak_age <- -b2 / (2 * b3)
+peak_age
+
+peak_salary <- coefs["(Intercept)"] + b2*peak_age + b3*peak_age^2
+exp(peak_salary)
+
+```
+
+La edad que maximiza el salario esperado es
+
+$age^*=-\frac{\hat\beta_2}{2\hat\beta_3}=\mathbf{45.2}\ \text{años}.$
+
+Para la muestra original, la edad del máximo es 45.2 años y, a partir de un bootstrap no paramétrico con 1,000 réplicas, obtenemos el intervalo percentil 95% $[44.07,\ 46.65]$. Esto sitúa el pico de salario por hora de manera estadísticamente precisa en la segunda mitad de los 40s, coherente con la acumulación temprana de capital humano y retornos decrecientes conforme aumentan los años. La Figura x (perfil estimado) muestra la pendiente positiva inicial, el aplanamiento alrededor del pico y una ligera caída posterior, tal como documentan los perfiles edad–salario clásicos.  
+
+```{r}
+
+peak_logw <- peak_salary
+peak_salary_lvl <- exp(peak_logw)
+peak_salary_lab <- format(peak_salary_lvl, big.mark = ",", decimal.mark = ".", scientific = FALSE, trim = TRUE)
+
+age_min <- 18
+age_max <- ceiling(max(db$age, na.rm = TRUE))
+age_seq <- seq(age_min, age_max, length.out = 400)
+newdat  <- data.frame(age = age_seq, age2 = age_seq^2)
+
+pred <- predict(model_age, newdata = newdat, se.fit = TRUE)
+crit <- qnorm(0.975)
+plot_data <- data.frame(
+  age = age_seq,
+  fit = exp(pred$fit),
+  lwr = exp(pred$fit - crit*pred$se.fit),
+  upr = exp(pred$fit + crit*pred$se.fit)
+)
+
+label_text <- "Age: 45.2 years\nWage: $7,248 hourly"
+label_x    <- peak_age
+label_y    <- peak_salary_lvl + 0.04*diff(range(plot_data$fit, na.rm = TRUE))
+
+p <- ggplot(plot_data, aes(x = age, y = fit)) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr), fill = "grey80", alpha = 0.35, colour = NA) +
+  geom_line(color = "black", linewidth = 1.0) +
+  geom_vline(xintercept = peak_age, linetype = "dashed", color = "grey35", linewidth = 0.6) +
+  annotate("point", x = peak_age, y = peak_salary_lvl,
+           shape = 21, size = 2.8, stroke = 0.7, fill = "white", color = "black") +
+  annotate("label", x = label_x, y = label_y, label = label_text,
+           label.size = 0, fill = "white", size = 3.2, hjust = 0) +
+  scale_x_continuous(limits = c(age_min, age_max), breaks = seq(18, age_max, by = 4)) +
+  scale_y_continuous(expand = expansion(mult = c(0.02, 0.06))) +
+  labs(title = "Age-Wage Profile",
+       x = "Age", y = "Hourly Wage (Levels)") +
+  theme_classic(base_size = 11) +
+  theme(plot.title = element_text(face = "bold"),
+        axis.title = element_text(face = "bold"),
+        axis.line  = element_line(color = "black"),
+        axis.ticks = element_line(color = "black"))
+p
+
+```
+
+## Calcular los intervalos de confianza del peak age con bootstrap
+
+```{r}
+# Se define la función que recibe los datos y un vector de índices que boot genera en cada subset de la muestra con reemplazo.
+# La función devuelve el peak age para cada subset.
+peak_fn <- function(data, index) {
+  fit <- lm(Log_Total_hour_salary ~ age + age2, data = data, subset = index) # Estima el modelo con cada subset
+  coefs <- coef(fit)
+  -coefs["age"] / (2 * coefs["age2"]) # Calcular el peak age de cada subset
+}
+
+# Se prueba en la muestra original
+peak_fn(db, 1:nrow(db))
+
+# bootstrap con 1000 réplicas
+set.seed(123)
+boot_out <- boot(db, statistic = peak_fn, R = 1000)
+
+# resultados
+boot_out$t0          # peak age de la muestra original
+boot_out             # resumen del bootstrap
+
+# intervalos de confianza
+boot.ci(boot_out, type = "perc")
+```
+
+Nota metodológica (bootstrap). El intervalo se construyó con el método percentil, re-muestreando individuos con reemplazo, re-estimando $\hat age^$ en cada réplica y leyendo los cuantiles 2.5% y 97.5%.
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r}
+
+```
+## 4. Equal pay for equal job
+
+
+# Unconditional Gender-Wage GAP
+
+$$ log(w) = β_1 + β_2Female + u $$
+
+
+```{r}
+# Create indicator of female
+
+db <- db |>
+  mutate(bin_female = 1 - sex)
+
+db$bin_female <- as.factor(db$bin_female)
+
+class(db$bin_female)
+
+# Run the model 
+model_sex <- lm(Log_Total_hour_salary ~ bin_female, data = db)
+
+# View the coefficients
+stargazer(model_sex, type = "text")
+
+```
+
+The unconditional regression indicates that women earn, on average, about 4.7 percent less per hour than men. This gap is estimated without controlling for any observable characteristics, so it reflects the raw difference in average hourly wages between the two groups. In other words, the coefficient captures the unconditional gender wage gap in log-wage terms.
+
+# Equal Pay for Equal Work?
+
+We need to control for: - Similar worker characteristics: Education (edu years, max level, college), age or experience.
+
+-   Similar job nature characteristics: formality (formal), size of the business (sizeFirm), Public-private sector (relab) 
+
+-   Similar job role characteristics: occupation (oficio)
+
+$$ log(w) = \beta_1 + \beta_2Female + \beta_3Education + \beta_4Age + \beta_5Age^2 + \beta_5Formality + \beta_6Business Size + \gamma_1Oficio + u $$
+
+$$ log(w) = \beta_1 + \beta_2Female + \beta_3Education + \beta_4Experience + \beta_5Age^2 + \beta_5 + u $$
+
+```{r}
+  
+# Individual characteristics (edu_years + age + age2)
+model_equality1 <- lm(Log_Total_hour_salary ~ bin_female + edu_years + age + age2, data = db)
+
+# Individual + Firm nature
+model_equality2 <- lm(Log_Total_hour_salary ~ bin_female + edu_years + age + age2 + formal +  sizeFirm + relab, data = db)
+
+# Individual + Firm nature + occupation
+model_equality3 <- lm(Log_Total_hour_salary ~ bin_female + edu_years + age + age2 + formal +  sizeFirm + relab + oficio, data = db)
+
+# View the coefficients
+stargazer(model_sex, model_equality1, model_equality2, model_equality3, type = "text", digits=7 ,out = "tabla_modelo.txt")
+
+```
+
+```{r}
+db %>%
+  mutate(sex = factor(sex, levels = c(1,0), labels = c("Men","Women"))) %>%
+  select(sex, edu_years, Log_Total_hour_salary, age) %>%
+  tbl_summary(by = sex,
+              statistic = all_continuous() ~ "{mean} ({sd})",
+              digits = all_continuous() ~ 2) %>%
+  add_n() %>%           # agrega N por grupo
+  add_p()               # prueba de diferencia (opcional)
+
+```
+
+```{R}
+
+db$bin_female <- as.numeric(as.character(db$bin_female))
+db$Log_Total_hour_salary <- as.numeric(as.character(db$Log_Total_hour_salary))
+
+#Running the model with FWL to check same results as the above estimations (Model 1)
+# Individual
+
+db<-db %>% mutate(FemaleResidX=lm(bin_female~edu_years + age + age2,data = db)$residuals) #Residuals of weight~foreign 
+
+db<-db %>% mutate(LogSalResidX=lm(Log_Total_hour_salary~edu_years + age + age2,data = db)$residuals) #Residuals of mpg~foreign 
+
+model_equality1_FWL<-lm(LogSalResidX~FemaleResidX,db)
+
+
+#Running the model with FWL to check same results as the above estimations (Model 2)
+# Individual  + Firm nature
+
+db<-db %>% mutate(Female2ResidX=lm(bin_female~edu_years + age + age2 + formal +  sizeFirm + relab ,data = db)$residuals) #Residuals of weight~foreign 
+
+db<-db %>% mutate(LogSal2ResidX=lm(Log_Total_hour_salary~edu_years + age + age2 + formal +  sizeFirm + relab,data = db)$residuals) #Residuals of mpg~foreign 
+
+model_equality2_FWL<-lm(LogSal2ResidX~Female2ResidX,db)
+
+
+#Running the model with FWL to check same results as the above estimations (Model 3)
+# Individual + Firm nature + occupation
+
+db<-db %>% mutate(Female3ResidX=lm(bin_female~edu_years + age + age2 + formal +  sizeFirm + relab + oficio,data = db)$residuals) #Residuals of weight~foreign 
+
+db<-db %>% mutate(LogSal3ResidX=lm(Log_Total_hour_salary~edu_years + age + age2 + formal +  sizeFirm + relab + oficio,data = db)$residuals) #Residuals of mpg~foreign 
+
+model_equality3_FWL<-lm(LogSal3ResidX~Female3ResidX,db)
+
+
+
+
+stargazer(model_sex, model_equality1_FWL, model_equality2_FWL, model_equality3_FWL, type="text",digits=7)
+
+
+#Dado que nos vamos a quedar con 3, corrijo el error estandar, dado que R, no reconoce el numero real de estimadores implicados en FWL:
+n <- nrow(db)
+# Número de parámetros en el modelo completo (incluye intercepto)
+k <- length(coef(model_equality3))
+# Varianza-covarianza del modelo FWL
+vcov_fwl <- vcov(model_equality3_FWL)
+# Corrección por grados de libertad
+vcov_fwl_corrected <- vcov_fwl * ((n - 1) / (n - k))
+# Error estándar corregido
+se_corrected <- sqrt(diag(vcov_fwl_corrected))
+se_corrected
+
+
+
+
+
+```
+
+```{R}
+
+#Sacamos los errores estandar con Bootstrap
+
+boot_fwl <- function(data, indices) {
+  db <- data[indices, ]
+  LogSalBootResidX <- resid(lm(Log_Total_hour_salary~edu_years + age + age2 + formal +  sizeFirm + relab + oficio,data = db))
+  FemaleBootResidX <- resid(lm(bin_female~edu_years + age + age2 + formal +  sizeFirm + relab + oficio,data = db))
+  coef(lm(LogSalBootResidX ~ FemaleBootResidX ))[2]
+}
+
+boot_fwl(db,1:nrow(db))
+
+set.seed(10101)
+results <- boot(db, boot_fwl, R = 1000)
+results
+boot.ci(results, type = "perc")
+
+
+```
+
+
+```{R}
+# Perfiles y Picos por Género (Edad) modelo con controles
+db$bin_female <- as.factor(as.character(db$bin_female))
+
+model_equality3interaction <- lm(Log_Total_hour_salary ~ bin_female + age + age2 + age*bin_female + age2*bin_female + edu_years + formal +  sizeFirm + relab + oficio, data = db)
+
+# Picos por género
+fit <- model_equality3interaction
+
+co <- coef(fit)
+nm <- names(co)
+
+#Busca el nombre correcto entre varias variantes
+pick1 <- function(cands) {
+  hit <- intersect(cands, nm)
+  if (length(hit) != 1) stop("No se identificó de forma única: ", paste(cands, collapse=", "))
+  unname(co[hit])
+}
+
+# β2 (age) y β3 (age^2 o I(age^2))
+b2 <- pick1(c("age"))
+b3 <- pick1(c("age2", "I(age^2)"))
+
+# δ2 (interacción lineal) y δ3 (interacción cuadrática)
+d2 <- pick1(c("age:bin_female","bin_female:age","age:bin_female1","bin_female1:age"))
+d3 <- pick1(c("age2:bin_female","bin_female:age2",
+              "I(age^2):bin_female","bin_female:I(age^2)",
+              "age2:bin_female1","bin_female1:age2",
+              "I(age^2):bin_female1","bin_female1:I(age^2)"))
+
+# Picos
+a_H <- - b2 / (2*b3)
+a_M <- - (b2 + d2) / (2*(b3 + d3))
+
+c(peak_men = a_H, peak_women = a_M)
+```
+
+
+```{R}
+#Determinacion de la diferencia estadistica de los picos
+# Error estándar del pico hombres
+Deltamale=deltaMethod(fit, "-age / (2 * age2)")
+Deltamale
+SEmale=as.numeric(Deltamale[2])
+
+# Error estándar del pico mujeres
+Deltafemale=deltaMethod(fit, "-(age + `bin_female1:age`) / (2 * (age2 + `bin_female1:age2`))")
+
+SEfemale=as.numeric(Deltafemale[2])
+
+
+# Diferencia de picos
+diff_peaks <- a_H - a_M
+diff_peaks
+
+# Error estándar de la diferencia
+se_diff <- sqrt(SEmale^2 + SEfemale^2)
+se_diff
+
+# Estadístico t
+t_stat <- diff_peaks / se_diff
+t_stat
+
+p_value <- 2 * pt(-abs(t_stat), df = df.residual(fit))
+p_value
+
+```
+
+```{r}
+
+fit <- model_equality3interaction
+mf  <- model.frame(fit)
+
+# Rango y grid
+age_min <- max(18, floor(min(mf$age, na.rm=TRUE)))
+age_max <- ceiling(max(mf$age, na.rm=TRUE))
+ages    <- seq(age_min, age_max, length.out = 300)
+
+# Fila de referencia (medias/moda)
+most_common <- function(x) names(sort(table(x), decreasing=TRUE))[1]
+ref_row <- as.data.frame(lapply(mf, function(x)
+  if (is.numeric(x)) mean(x, na.rm=TRUE) else factor(most_common(x), levels=levels(x))
+))[1,,drop=FALSE]
+
+# Grids por sexo (factor 2 niveles o 0/1)
+if (is.factor(mf$bin_female)) { lev <- levels(mf$bin_female); male <- lev[1]; female <- lev[2]
+  make_grid <- function(sex) { nd <- ref_row[rep(1, length(ages)),,drop=FALSE]
+    nd$age <- ages; if ("age2"%in%names(nd)) nd$age2 <- ages^2
+    nd$bin_female <- factor(sex, levels=lev); nd }
+} else { male <- 0; female <- 1
+  make_grid <- function(sex) { nd <- ref_row[rep(1, length(ages)),,drop=FALSE]
+    nd$age <- ages; if ("age2"%in%names(nd)) nd$age2 <- ages^2
+    nd$bin_female <- sex; nd }
+}
+grid_m <- make_grid(male); grid_f <- make_grid(female)
+
+# Predicciones (log) -> niveles + IC 95%
+crit <- qnorm(0.975)
+to_levels <- function(pr) data.frame(fit=exp(pr$fit),
+                                     lwr=exp(pr$fit-crit*pr$se.fit),
+                                     upr=exp(pr$fit+crit*pr$se.fit))
+pm <- predict(fit, newdata=grid_m, se.fit=TRUE)
+pf <- predict(fit, newdata=grid_f, se.fit=TRUE)
+plot_data <- rbind(
+  cbind(age=ages, to_levels(pm), group="Hombres"),
+  cbind(age=ages, to_levels(pf), group="Mujeres")
+)
+
+# Picos (con interacciones)
+co <- coef(fit); nm <- names(co)
+b2 <- unname(co["age"])
+b3 <- unname(co[intersect(c("age2","I(age^2)"), nm)][1])
+d2 <- unname(co[intersect(c("age:bin_female","bin_female:age","age:bin_female1","bin_female1:age"), nm)][1])
+d3 <- unname(co[intersect(c("age2:bin_female","bin_female:age2","I(age^2):bin_female","bin_female:I(age^2)",
+                            "age2:bin_female1","bin_female1:age2","I(age^2):bin_female1","bin_female1:I(age^2)"), nm)][1])
+v_m <- max(age_min, min(age_max, - b2/(2*b3)))
+v_f <- max(age_min, min(age_max, - (b2 + d2)/(2*(b3 + d3))))
+
+# Puntos crudos en niveles, color por sexo (sin afectar eje-Y)
+db_pts <- transform(
+  db,
+  group = if (is.factor(bin_female)) factor(bin_female, labels=c("Hombres","Mujeres"))
+          else factor(bin_female, levels=c(0,1), labels=c("Hombres","Mujeres")),
+  wage  = exp(Log_Total_hour_salary)
+)
+
+# Tope del eje-Y tomado de las curvas (no de los puntos)
+y_cap <- max(quantile(plot_data$upr, 0.999, na.rm=TRUE)) * 1.2
+
+# grafico
+cols <- c("Hombres"="#274C77","Mujeres"="#EF6351")
+p <- ggplot(plot_data, aes(age, fit, color=group, linetype=group)) +
+  geom_ribbon(aes(ymin=lwr, ymax=upr, fill=group), alpha=0.20, colour=NA, show.legend=FALSE) +
+  geom_point(data=db_pts, aes(age, wage, color=group),
+             alpha=0.5, size=0.7, stroke=0.4, inherit.aes=FALSE,
+             position=position_jitter(width=0.25, height=0), na.rm=TRUE) +
+  geom_line(linewidth=1.2) +
+  geom_vline(xintercept=v_m, linetype="dashed", color=cols["Hombres"], show.legend=FALSE) +
+  geom_vline(xintercept=v_f, linetype="dashed", color=cols["Mujeres"],  show.legend=FALSE) +
+  coord_cartesian(ylim=c(0, y_cap)) +
+  scale_color_manual(NULL, values=cols) +
+  scale_fill_manual(NULL,  values=cols) +
+  scale_linetype_manual(NULL, values=c("Hombres"="solid","Mujeres"="solid")) +
+  scale_y_continuous(labels=label_number(big.mark=",")) +
+  labs(title="Age-Wage Profile by sex (Fit with controls)",
+       x="Age", y="Hourly Wage (Levels)") +
+  theme_classic(base_size=12) +
+  theme(plot.title=element_text(face="bold"),
+        axis.title=element_text(face="bold"),
+        legend.position="top")
+
+p
+
+ggsave("perfil_edad_salario_controles.jpg", plot = p,
+       width = 8, height = 4.4,
+       dpi = 600)
+
+```
+
+```{r}
+
+peak_fn <- function(data, index) {
+  d <- data[index, , drop = FALSE]
+
+  # Asegura levels consistentes en cada réplica
+  if (!is.factor(d$bin_female)) d$bin_female <- factor(d$bin_female, levels = c(0,1))
+
+  fit <- lm(Log_Total_hour_salary ~ bin_female + age + age2 +
+              age*bin_female + age2*bin_female +
+              edu_years + formal + sizeFirm + relab + oficio,
+            data = d)
+
+  co <- coef(fit); nm <- names(co)
+
+  pick1 <- function(cands) {
+    hit <- intersect(cands, nm)
+    if (length(hit) < 1) stop("No se encontró coef para: ", paste(cands, collapse=", "))
+    unname(co[hit[1]])
+  }
+
+  # β2 y β3
+  b2 <- pick1(c("age"))
+  b3 <- pick1(c("age2", "I(age^2)"))
+
+  # δ2 y δ3
+  d2 <- pick1(c("age:bin_female","bin_female:age","age:bin_female1","bin_female1:age"))
+  d3 <- pick1(c("age2:bin_female","bin_female:age2",
+                "I(age^2):bin_female","bin_female:I(age^2)",
+                "age2:bin_female1","bin_female1:age2",
+                "I(age^2):bin_female1","bin_female1:I(age^2)"))
+
+  a_H <- - b2 / (2*b3)
+  a_M <- - (b2 + d2) / (2*(b3 + d3))
+
+  c(peak_men = a_H, peak_women = a_M)   # <-- devolver ambos
+}
+
+# Prueba en muestra original
+peak_fn(db, 1:nrow(db))
+
+# Bootstrap
+set.seed(123)
+boot_out <- boot(db, statistic = peak_fn, R = 1000)
+
+# Resultados
+boot_out$t0                        # c(peak_men, peak_women)
+boot.ci(boot_out, type = "perc", index = 1)  # IC hombres
+boot.ci(boot_out, type = "perc", index = 2)  # IC mujeres
+```
+
+
+```{r}
+# Perfiles y Picos por Género (Edad) modelo SIN controles
+
+model_edad_sex <- lm(Log_Total_hour_salary ~ bin_female + age + age2 + age*bin_female + age2*bin_female, data = db)
+
+# Picos por género
+fit12 <- model_edad_sex
+
+co12 <- coef(fit12)
+nm12 <- names(co12)
+
+#Buscar el nombre correcto entre varias variantes
+pick12 <- function(cands12) {
+  hit12 <- intersect(cands12, nm12)
+  if (length(hit12) != 1) stop("No se identificó de forma única: ", paste(cands12, collapse=", "))
+  unname(co12[hit12])
+}
+
+# β2 (age) y β3 (age^2 o I(age^2))
+b212 <- pick12(c("age"))
+b312 <- pick12(c("age2", "I(age^2)"))
+
+# δ2 (interacción lineal) y δ3 (interacción cuadrática)
+d212 <- pick12(c("age:bin_female","bin_female:age","age:bin_female1","bin_female1:age"))
+d312 <- pick12(c("age2:bin_female","bin_female:age2",
+              "I(age^2):bin_female","bin_female:I(age^2)",
+              "age2:bin_female1","bin_female1:age2",
+              "I(age^2):bin_female1","bin_female1:I(age^2)"))
+
+# Picos
+a_H12 <- - b212 / (2*b312)
+a_M12 <- - (b212 + d212) / (2*(b312 + d312))
+
+c(peak_men12 = a_H12, peak_women12 = a_M12)
+
+```
+
+```{r}
+# Modelo sin controles
+fit <- model_edad_sex
+mf  <- model.frame(fit)
+
+# Rango y grid
+age_min <- max(18, floor(min(mf$age, na.rm = TRUE)))
+age_max <- ceiling(max(mf$age, na.rm = TRUE))
+ages    <- seq(age_min, age_max, length.out = 300)
+
+# Fila de referencia (medias/moda)
+most_common <- function(x) names(sort(table(x), decreasing = TRUE))[1]
+ref_row <- as.data.frame(lapply(mf, function(x)
+  if (is.numeric(x)) mean(x, na.rm = TRUE) else factor(most_common(x), levels = levels(x))
+))[1, , drop = FALSE]
+
+# Grids por sexo (factor con 2 niveles o 0/1)
+if (is.factor(mf$bin_female)) {
+  lev <- levels(mf$bin_female); male <- lev[1]; female <- lev[2]
+  make_grid <- function(sex) {
+    nd <- ref_row[rep(1, length(ages)), , drop = FALSE]
+    nd$age <- ages; if ("age2" %in% names(nd)) nd$age2 <- ages^2
+    nd$bin_female <- factor(sex, levels = lev); nd
+  }
+} else {
+  male <- 0; female <- 1
+  make_grid <- function(sex) {
+    nd <- ref_row[rep(1, length(ages)), , drop = FALSE]
+    nd$age <- ages; if ("age2" %in% names(nd)) nd$age2 <- ages^2
+    nd$bin_female <- sex; nd
+  }
+}
+grid_m <- make_grid(male)
+grid_f <- make_grid(female)
+
+# predict
+crit <- qnorm(0.975)
+to_levels <- function(pr) data.frame(
+  fit = exp(pr$fit),
+  lwr = exp(pr$fit - crit*pr$se.fit),
+  upr = exp(pr$fit + crit*pr$se.fit)
+)
+pm <- predict(fit, newdata = grid_m, se.fit = TRUE)
+pf <- predict(fit, newdata = grid_f, se.fit = TRUE)
+plot_data <- rbind(
+  cbind(age = ages, to_levels(pm), group = "Hombres"),
+  cbind(age = ages, to_levels(pf), group = "Mujeres")
+)
+
+# Picos
+co <- coef(fit); nm <- names(co)
+b2 <- unname(co["age"])
+b3 <- unname(co[intersect(c("age2","I(age^2)"), nm)][1])
+d2 <- unname(co[intersect(c("age:bin_female","bin_female:age","age:bin_female1","bin_female1:age"), nm)][1])
+d3 <- unname(co[intersect(c("age2:bin_female","bin_female:age2",
+                            "I(age^2):bin_female","bin_female:I(age^2)",
+                            "age2:bin_female1","bin_female1:age2",
+                            "I(age^2):bin_female1","bin_female1:I(age^2)"), nm)][1])
+v_m <- max(age_min, min(age_max, - b2/(2*b3)))
+v_f <- max(age_min, min(age_max, - (b2 + d2)/(2*(b3 + d3))))
+
+# Puntos crudos en niveles, color por sexo
+db_pts <- transform(
+  db,
+  group = if (is.factor(bin_female)) factor(bin_female, labels = c("Hombres","Mujeres"))
+          else factor(bin_female, levels = c(0,1), labels = c("Hombres","Mujeres")),
+  wage  = exp(Log_Total_hour_salary)
+)
+
+# Tope del eje-Y basado en las curvas (no los puntos)
+y_cap <- max(quantile(plot_data$upr, 0.999, na.rm = TRUE)) * 1.02
+
+# grafico
+cols <- c("Hombres"="#274C77","Mujeres"="#EF6351")
+p2 <- ggplot(plot_data, aes(age, fit, color = group)) +  # líneas sólidas para ambos
+  geom_ribbon(aes(ymin = lwr, ymax = upr, fill = group),
+              alpha = 0.20, colour = NA, show.legend = FALSE) +
+  geom_point(data = db_pts, aes(age, wage, color = group),
+             alpha = 0.5, size = 0.7, stroke = 0.4, inherit.aes = FALSE,
+             position = position_jitter(width = 0.25, height = 0), na.rm = TRUE) +
+  geom_line(linewidth = 1.2) +
+  geom_vline(xintercept = v_m, linetype = "dashed", color = cols["Hombres"], show.legend = FALSE) +
+  geom_vline(xintercept = v_f, linetype = "dashed", color = cols["Mujeres"],  show.legend = FALSE) +
+  coord_cartesian(ylim = c(0, y_cap)) +
+  scale_color_manual(NULL, values = cols) +
+  scale_fill_manual(NULL,  values = cols) +
+  scale_y_continuous(labels = scales::label_number(big.mark = ",")) +
+  labs(title = "Age–Wage Profile by Sex (No controls)",
+       x = "Age", y = "Hourly Wage (levels)") +
+  theme_classic(base_size = 12) +
+  theme(plot.title = element_text(face = "bold"),
+        axis.title  = element_text(face = "bold"),
+        legend.position = "top")
+p2
+
+ggsave("perfil_edad_salario_nocontroles.jpg", plot = p2,
+       width = 8, height = 4.4,
+       dpi = 600)
+```
+
+
+```{r}
+# Bootstrap (sin controles)
+peak_fns <- function(data, index) {
+  d <- data[index, , drop = FALSE]
+  if (!is.factor(d$bin_female)) d$bin_female <- factor(d$bin_female, levels = c(0,1))
+
+  fit <- lm(
+    Log_Total_hour_salary ~ bin_female + age + age2 +
+      age*bin_female + age2*bin_female,
+    data = d
+  )
+
+  co <- coef(fit); nm <- names(co)
+  pick1 <- function(cands) { h <- intersect(cands, nm); if (!length(h)) stop("faltan: ", paste(cands, collapse=", ")); unname(co[h[1]]) }
+
+  b2 <- pick1(c("age"))
+  b3 <- pick1(c("age2","I(age^2)"))
+  d2 <- pick1(c("age:bin_female","bin_female:age","age:bin_female1","bin_female1:age"))
+  d3 <- pick1(c("age2:bin_female","bin_female:age2",
+                "I(age^2):bin_female","bin_female:I(age^2)",
+                "age2:bin_female1","bin_female1:age2",
+                "I(age^2):bin_female1","bin_female1:I(age^2)"))
+
+  c(peak_men   = - b2/(2*b3),
+    peak_women = - (b2 + d2)/(2*(b3 + d3)))
+}
+
+# Prueba en muestra original
+peak_fns(db, 1:nrow(db))
+
+set.seed(123)
+boot_outs <- boot(db, statistic = peak_fns, R = 1000)
+
+boot_outs$t0
+boot.ci(boot_outs, type = "perc",  index = 1)  # IC hombres
+boot.ci(boot_outs, type = "perc",  index = 2)  # IC mujeres
+```
+##Punto 5
+
+```{r}
+db <- db %>%
+  mutate(exp2 = exp^2)
+```
+
+```{r}
+
+# split 70/30
+set.seed(10101)
+inTrain <- createDataPartition(y = db$Log_Total_hour_salary, p = 0.7, list = FALSE)
+
+
+
+# Train y test
+train <- db[inTrain, ]
+test  <- db[-inTrain, ]
+
+# Revisar 
+c(n_train = nrow(train), n_test = nrow(test), prop_train = nrow(train)/nrow(db))
+```
+
+```{r}
+# Control de re-muestreo: k-fold CV
+ctrl <- trainControl(
+  method = "CV" , # Method for resampling. It could be CV, repeated CV, LOOCV, and so on. 
+  number = 10     # 10 folds
+)
+```
+
+### Regresiones base
+
+```{r}
+# Perfil edad-salario (edad + edad^2)
+form_B0 <- Log_Total_hour_salary ~ age + age2
+
+# female
+form_B1 <- Log_Total_hour_salary ~ bin_female
+
+# female + controles
+form_B2 <- Log_Total_hour_salary ~ bin_female + edu_years + age + age2 + formal +  sizeFirm + relab + oficio
+```
+
+### Regresiones nuevas
+
+```{r}
+#Nuevo modelo con variable proxy de experiencia en lugar de años de educación
+form_M1 <- Log_Total_hour_salary ~ bin_female + age + age2 + maxEducLevel + exp + exp2+ formal + sizeFirm + relab + oficio
+
+#Una mejora de nuestro modelo, incluyendole poly a age y estrato
+form_M2 <- Log_Total_hour_salary ~ bin_female + edu_years + poly(age, 4, raw=TRUE) + formal + sizeFirm + relab + oficio + estrato1
+
+#Modelo que busca predecir mediante las relaciones entre la edad y distintas variables de la persona y su conocimiento
+form_M3 <- Log_Total_hour_salary ~ bin_female + edu_years + age + age2 + age*bin_female + age2*bin_female + age*edu_years
+
+#Un modelo con un montón de variables y exponenciales
+form_M4 <- Log_Total_hour_salary ~ poly(age, 4, raw=TRUE) + bin_female + poly(exp,5,raw=TRUE) + edu_years + formal + sizeFirm + relab + estrato1 + college + age*bin_female + age2*bin_female
+
+#Un modelo centrado solamente en características del empleo y la experiencia de la persona
+form_M5 <- Log_Total_hour_salary ~ poly(exp, 7, raw=TRUE) + oficio + oficio*exp
+
+```
+
+```{r}
+set.seed(10101)
+modelo_B0 <- train(form_B0,
+                   data = train,
+                   method = "lm",
+                   metric = "RMSE",
+                   trControl = ctrl)
+
+scoreCV_B0 <- mean(modelo_B0$resample$RMSE)
+pred_B0 <- predict(modelo_B0, newdata = test)
+scoreTEST_B0 <- RMSE(test$Log_Total_hour_salary, pred_B0)
+
+modelo_B0
+```
+
+```{r}
+set.seed(10101)
+modelo_B1 <- train(form_B1,
+                  data = train,
+                  method = "lm",
+                  metric = "RMSE",
+                  trControl = ctrl)
+
+scoreCV_B1 <- mean(modelo_B1$resample$RMSE)
+pred_B1 <- predict(modelo_B1, newdata = test)
+scoreTEST_B1 <- RMSE(test$Log_Total_hour_salary, pred_B1)
+
+modelo_B1
+```
+
+```{r}
+set.seed(10101)
+modelo_B2 <- train(form_B2,
+                   data = train,
+                   method = "lm",
+                   metric = "RMSE",
+                  trControl = ctrl)
+
+scoreCV_B2 <- mean(modelo_B2$resample$RMSE)
+pred_B2 <- predict(modelo_B2, newdata = test)
+scoreTEST_B2 <- RMSE(test$Log_Total_hour_salary, pred_B2)
+
+modelo_B2
+```
+
+```{r}
+set.seed(10101)
+modelo_M1 <- train(form_M1,
+                   data = train,
+                   method = "lm",
+                   metric = "RMSE",
+                   trControl = ctrl)
+
+scoreCV_M1 <- mean(modelo_M1$resample$RMSE)
+pred_M1 <- predict(modelo_M1, newdata = test)
+scoreTEST_M1 <- RMSE(test$Log_Total_hour_salary, pred_M1)
+
+modelo_M1
+```
+
+```{r}
+set.seed(10101)
+modelo_M2 <- train(form_M2,
+                    data = train,
+                    method = "lm",
+                    metric = "RMSE",
+                    trControl = ctrl)
+
+scoreCV_M2 <- mean(modelo_M2$resample$RMSE)
+pred_M2 <- predict(modelo_M2, newdata = test)
+scoreTEST_M2 <- RMSE(test$Log_Total_hour_salary, pred_M2)
+
+modelo_M2
+```
+
+```{r}
+set.seed(10101)
+modelo_M3 <- train(form_M3,
+                    data = train,
+                    method = "lm",
+                    metric = "RMSE",
+                    trControl = ctrl)
+
+scoreCV_M3 <- mean(modelo_M3$resample$RMSE)
+pred_M3 <- predict(modelo_M3, newdata = test)
+scoreTEST_M3 <- RMSE(test$Log_Total_hour_salary, pred_M3)
+
+modelo_M3
+```
+
+```{r}
+set.seed(10101)
+modelo_M4 <- train(form_M4,
+                    data = train,
+                    method = "lm",
+                    metric = "RMSE",
+                    trControl = ctrl)
+
+scoreCV_M4 <- mean(modelo_M4$resample$RMSE)
+pred_M4 <- predict(modelo_M4, newdata = test)
+scoreTEST_M4 <- RMSE(test$Log_Total_hour_salary, pred_M4)
+
+modelo_M4
+```
+
+```{r}
+set.seed(10101)
+modelo_M5 <- train(form_M5,
+                    data = train,
+                    method = "lm",
+                    metric = "RMSE",
+                    trControl = ctrl)
+
+scoreCV_M5 <- mean(modelo_M5$resample$RMSE)
+pred_M5 <- predict(modelo_M5, newdata = test)
+scoreTEST_M5 <- RMSE(test$Log_Total_hour_salary, pred_M5)
+
+modelo_M5
+```
+
+```{r}
+
+tabla_modelos <- data.frame(
+  Modelo = c("B0_age2","B1_female","B2_female_ctrl",
+                "M1","M2","M3","M4","M5"),
+  RMSE_CV = c(scoreCV_B0, scoreCV_B1, scoreCV_B2, scoreCV_M1, scoreCV_M2, scoreCV_M3,   scoreCV_M4, scoreCV_M5),
+  RMSE_TEST = c(scoreTEST_B0, scoreTEST_B1, scoreTEST_B2,
+               scoreTEST_M1, scoreTEST_M2, scoreTEST_M3, scoreTEST_M4, scoreTEST_M5))
+
+# Ordena por desempeño en test (menor RMSE es mejor)
+tabla_modelos <- tabla_modelos[order(tabla_modelos$RMSE_TEST), ]
+tabla_modelos
+
+
+
+```
+La estimación con el menor RMSE fue la especificación adicional #4, el cual es el modelo con el mayor número de variables y complejidades
+
+```{r}
+
+```
+
+
+```{r}
+
+scores_LOOCV <- c()
+
+  set.seed(10101)   
+  ctrl <- trainControl(method = "LOOCV")  ## Method
+  
+  # train the model
+  LOOCVM4 <- train(form_M4,
+                 data = db,
+                 method = 'lm', 
+                 trControl= ctrl)
+  
+  ## Save the RMSE
+  scoreLOOCVM4 <-RMSE(LOOCVM4$pred$pred, db$Log_Total_hour_salary)
+  scores_LOOCV<- append(scores_LOOCV, scoreLOOCVM4) 
+
+  # train the model
+  LOOCVM2 <- train(form_M2,
+                 data = db,
+                 method = 'lm', 
+                 trControl= ctrl)
+  
+  ## Save the RMSE
+  scoreLOOCVM2 <-RMSE(LOOCVM2$pred$pred, db$Log_Total_hour_salary)
+  scores_LOOCV<- append(scores_LOOCV, scoreLOOCVM2) 
+  
+  
+scores_LOOCV  
+
+```
+
+
