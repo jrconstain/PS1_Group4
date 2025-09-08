@@ -41,8 +41,8 @@ The repository follows the required template and includes the following folders:
 
 2. **Install dependencies**  
    Make sure you have R, RStudio (or equivalent), and Python (for scraping) installed.  
-   - R packages: `tidyverse`, `knitr`, `ggplot2`  
-   - Python packages: `requests`, `pandas`, `selenium`, `beautifulsoup4`  
+   - R packages: `tidyverse`, `stargazer`, `ggplot2`, `caret`, etc.  
+   - Python packages: `requests`, `pandas`, `selenium`, `beautifulsoup4`, etc.  
 
 3. **Run the scraping**  
    - Execute `scripts/scrape.py` to generate the initial dataset.  
@@ -60,9 +60,3 @@ The main document is located in the `document/` folder:
 This file includes the theoretical framework, methodology, results, and conclusions of the project.  
 
 ---
-
-## 📌 Notes  
-
-- The dataset `data.csv` in `stores` corresponds to a merge of all the ten scraped pages.  
-- Other files in `stores/` allow tracing the cleaning, coding, and analysis workflow.  
-- This repository follows the structure and recommendations of the **Problem Set Template Repository** for the course.  
