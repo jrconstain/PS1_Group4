@@ -1216,13 +1216,13 @@ df_errores <- data.frame(error = test$error)
 
 # Gráfico de distribución
 ggplot(df_errores, aes(x = error)) +
-  geom_histogram(bins = 30, fill = "skyblue", color = "black", alpha = 0.7) +
-  geom_vline(xintercept = Mean_errorsA2VS, color = "green", linetype = "dashed", size = 1) +
-  geom_vline(xintercept = Mean_errorsA2VS + 2 * sd_errorsA2VS, color = "red", linetype = "dashed", size = 1) +
-  geom_vline(xintercept = Mean_errorsA2VS - 2 * sd_errorsA2VS, color = "red", linetype = "dashed", size = 1) +
+  geom_histogram(bins = 30, fill = "grey", color = "black", alpha = 0.7) +
+  geom_vline(xintercept = Mean_errorsM2VS, color = "black", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = Mean_errorsM2VS + 2 * sd_errorsM2VS, color = "darkblue", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = Mean_errorsM2VS - 2 * sd_errorsM2VS, color = "darkblue", linetype = "dashed", size = 1) +
   labs(title = "Distribución del error de predicción",
-       x = "Error de predicción",
-       y = "Frecuencia") +
+       x = "Prediction Error",
+       y = "-") +
   theme_minimal()
 
 # Casos de outliers
@@ -1233,15 +1233,16 @@ outliers_vars <- c("y_ingLab_m", "relab", "totalHoursWorked", "age","sex","estra
 stargazer(as.data.frame(Outliersdf[, outliers_vars]), type = "latex")
 
 
-# Gráfico de distribución
+
+# Gráfico de distribución Ing_Lab_m
+
 ggplot(Outliersdf, aes(x = y_ingLab_m)) +
   geom_histogram(bins = 30, fill = "gray", color = "black", alpha = 0.7) +
-  geom_vline(xintercept = mean(Outliersdf$y_ingLab_m), color = "darkgray", linetype = "dashed", size = 1) +
-  labs(title = "Distribución del ingreso laboral mensual",
-       x = "Ingreso laboral Mensual",
-       y = "Frecuencia") +
-  theme_minimal()
-
+  geom_vline(xintercept = mean(Outliersdf$y_ingLab_m), color = "darkblue", linetype = "dashed", size = 1) +
+  labs(x = "Monthly Laboral Income",
+       y = "-") +
+  theme_minimal() +
+  scale_x_continuous(labels = label_number(accuracy = 1))
 
 
 
