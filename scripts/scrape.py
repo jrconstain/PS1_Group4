@@ -27,7 +27,7 @@ for tr in dictionary.find_all("tr")[1:]:
 
 # Convertir a DataFrame
 dictionary = pd.DataFrame(rows, columns=headers)
-dictionary.to_csv('../data/dictionary.csv', index=False)
+dictionary.to_csv('../stores/dictionary.csv', index=False)
 
 # Evidenciar scrapping exitoso
 print("Scrapping exitoso del diccionario de datos ✅")
@@ -59,7 +59,7 @@ for tr in labels.find_all("tr")[1:]:
 
 # Convertir a DataFrame
 labels = pd.DataFrame(rows, columns=headers)
-labels.to_csv('../data/labels.csv', index=False)
+labels.to_csv('../stores/labels.csv', index=False)
 
 # Evidenciar scrapping exitoso
 print("Scrapping exitoso de las etiquetas de datos ✅")
@@ -89,7 +89,7 @@ import random
 
 # Parámetros
 BASE_URL = "https://ignaciomsarmiento.github.io/GEIH2018_sample/page{n}.html"
-DATA_DIR = Path("../data/raw")
+DATA_DIR = Path("../stores/raw")
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 XPATH_TABLE = '/html/body/div/div/div[2]/div/table'
@@ -190,7 +190,7 @@ def scrape_one_page(n: int) -> pd.DataFrame:
 def save_page_csv(df: pd.DataFrame, n: int) -> Path:
     out_path = DATA_DIR / f"page{n}.csv"
     df.to_csv(out_path, index=False, encoding="utf-8")
-    print(f"[OK] Guardado data/page{n}.csv ✅ ({df.shape[0]} filas, {df.shape[1]} columnas)")
+    print(f"[OK] Guardado stores/raw/page{n}.csv ✅ ({df.shape[0]} filas, {df.shape[1]} columnas)")
     return out_path
 
 def next_pages_to_run(start: int = 1, end: int = 10):
@@ -201,7 +201,7 @@ def next_pages_to_run(start: int = 1, end: int = 10):
     to_run = []
     for n in range(start, end + 1):
         if (DATA_DIR / f"page{n}.csv").exists():
-            print(f"[SKIP] Ya existe data/page{n}.csv. Omitiendo.")
+            print(f"[SKIP] Ya existe sotres/raw/page{n}.csv. Omitiendo.")
         else:
             to_run.append(n)
     return to_run
@@ -228,7 +228,7 @@ def combine_all(start: int = 1, end: int = 10, outname: str = "data.csv"):
     out_path = DATA_DIR / outname
     big.to_csv(out_path, index=False, encoding="utf-8")
 
-    print(f"[SUCCESS] data/{outname} creado con éxito ✅")
+    print(f"[SUCCESS] stores/raw/{outname} creado con éxito ✅")
     print(f"[INFO] Dimensiones finales: {big.shape[0]} filas x {big.shape[1]} columnas")
 
 def main():

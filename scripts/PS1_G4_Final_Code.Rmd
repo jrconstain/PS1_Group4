@@ -33,7 +33,7 @@ p_load(rio, # Import/export data.
 # Database load and initial cleaning
 
 ```{r}
-ruta <- here("data", "data.csv")
+ruta <- here("stores", "data.csv")
 db_base <- read_csv(ruta)
 ```
 
