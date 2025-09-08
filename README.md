@@ -11,7 +11,7 @@ Our work focuses on **predicting wages using linear regression models** based on
 The repository follows the required template and includes the following folders:  
 
 - **document/**  
-  Contains the final document *Understanding and Predicting Wages. Evidence from Bogotá.* in PDF format: `PS1_G4_Final.pdf`
+  Contains the final document *Understanding and Predicting Wages. Evidence from Bogotá.* in PDF format: `PS1_G4_Final.pdf`.
   All tables and figures included in the document are referenced from the `views` folder.  
 
 - **scripts/**  
