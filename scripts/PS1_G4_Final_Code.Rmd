@@ -46,11 +46,11 @@ db_base <- db_base %>%
 # New database dimensions
 dim(db_base)
 # Number and proportion of minors
-print((32177-24054)/32177)
+print((32177-24568)/32177)
 ```
 
-We lost 25.2% of observations that corresponds to the number of minors,
-leaving us with 24.054 individuals in the data.
+We lost 23.6% of observations that corresponds to the number of minors,
+leaving us with 24.568 individuals in the data.
 
 # Understanding "employment" in the data
 
@@ -63,17 +63,6 @@ db_base <- db_base %>%
     bin_hoursWorked  = ifelse(totalHoursWorked > 0, 1, 0),
     bin_ing_total  = ifelse(ingtot > 0, 1, 0),
   )
-
-# See the distribution of "occupied" and those who have worked the previous week
-table(db_base$dsi) # How many "desempleados" (unmeployed)
-table(db_base$ocu) # How "ocupados" (include independents, "cuenta propia")
-table(db_base$ocu,db_base$dsi) # All occupied are not unemployed, but not all unoccupied are unemployed
-
-# How it relates with hours workers and income
-table(db_base$bin_hoursWorked, db_base$ocu) # ocu equivalent to hours worked > 0
-table(db_base$bin_hoursWorked, db_base$bin_ing_total) # 250 occupied people report 0 income
-table(db_base$bin_hoursWorked, db_base$bin_ingLab_m_ha) # of the 16397, only 9785 report income from labor
-
 ```
 
 There's a huge tension between "income" and "wage". The "ocupados"
@@ -95,10 +84,47 @@ db_base <- db_base %>%
 
 ```
 
+# How much people work? 
+
+Since the question on total hours worked is used to construct our main outcome variable—hourly wage—and it refers specifically to the number of hours worked in the week immediately prior to the survey, there may be random or external factors that atypically affect the reported figure. Respondents could, for example, report unusually high hours if they experienced an exceptional workload, or unusually low hours if they had an atypical break during that week. To avoid such outliers distorting our model, we first explore the distribution of reported hours and then filter extreme values accordingly.
+
+```{r}
+ggplot(db_base, aes(x = totalHoursWorked)) +
+  # Histograma con densidad
+  geom_histogram(aes(y = after_stat(density)),
+                 bins = 50,
+                 fill = "grey80",
+                 color = "black",
+                 alpha = 0.6) +
+  # Línea de densidad suavizada
+  geom_density(color = "black", linewidth = 1.0) +
+  # Línea vertical en la media
+  geom_vline(xintercept = mean(db_base$totalHoursWorked, na.rm = TRUE),
+             linetype = "dashed",
+             color = "grey35",
+             linewidth = 0.6) +
+  # Estética del gráfico
+  scale_x_continuous(expand = expansion(mult = c(0.02, 0.02))) +
+  scale_y_continuous(expand = expansion(mult = c(0.02, 0.06))) +
+  labs(x = "Total Hours Worked",
+       y = "Density") +
+  theme_classic(base_size = 11) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    axis.title = element_text(face = "bold"),
+    axis.line  = element_line(color = "black"),
+    axis.ticks = element_line(color = "black")
+  )
+
+ggsave("distribution_total_hours.jpg", width = 8, height = 5)
+
+hours_vars  <- c("totalHoursWorked", "hoursWorkUsual")
+stargazer(as.data.frame(db_base[, hours_vars]), type = "text")
+
+```
 Lastly, in order to remove atypical cases were people were reporting
 Total hours worked above the percentil 99 or below the percentil 1, we
-removed those observation from the dataset (Explicar tema de manuel, que
-el también lo hace y la lógica del why)
+removed those observation from the dataset.
 
 ```{r}
 
@@ -114,10 +140,12 @@ db_base <- db_base %>%
 db_base_outliers <- db_base %>%
   filter(out_totalHoursWorked == 1)
 
-
 # Filtrar los outliers de mi base final
 db_base <- db_base %>%
   filter(out_totalHoursWorked == 0)
+
+stargazer(as.data.frame(db_base[, hours_vars]), type = "text")
+stargazer(as.data.frame(db_base[, hours_vars]), type = "text")
 
 ```
 
@@ -126,135 +154,7 @@ this would allow us only to predict wages of people who already report
 some income labor, so we could aim detect subreporting in tax fillings
 of employed people, but no vulnerable people who could need assistance.
 
-Note: There is a problem: How much people is formally employed? How big
-a problem is subreporting by formal employed people?
-
-Note 2: We have difficulties ordering the story, because first we talk
-about tax fraud but then we want to do inference about age and sex.
-
-# Characterizing employment
-
-How much of employment is informal? How much it comes from the small
-businesses (less than 5 employees)?
-
-```{r}
-# Factor labels for better reading
-db_base$microEmpresa <- factor(db_base$microEmpresa, labels = c("No Small", "Small"))
-db_base$informal <- factor(db_base$informal, labels = c("Formal", "Informal"))
-
-# Informality:
-table(db_base$formal, db_base$informal)  # check complementary distrib
-prop.table(table(db_base$formal, db_base$informal)) 
-```
-
-22.7% of employment is informal, 77.2% is formal.
-
-```{r}
-# Small businesses role:
-table(db_base$microEmpresa) # count employment from small businesses
-prop.table(table(db_base$microEmpresa)) # 
-```
-
-22.5% employment comes from small businesses, 77.4% comes from
-businesses with more than 5 employees.
-
-```{r}
-# Are all small businesses informal?
-table(db_base$microEmpresa, db_base$informal)
-prop.table(table(db_base$microEmpresa, db_base$informal)) 
-```
-
-Majority of employment comes from formal employment in not-small firm.
-Only 7% comes from formal in small businesses, and a similarly scarce 7%
-is informal employment in not-small firms
-
-# Exploring our variables of interest
-
-## Income, wages and hours worked
-
-```{r}
-# Create hourly wage from second occupation
-db_base$y_salarySec_m_ha <- with(
-  db_base,
-  ifelse(is.na(hoursWorkActualSecondJob) | hoursWorkActualSecondJob <= 0,
-         NA,
-         y_salarySec_m / (hoursWorkActualSecondJob * (30 / 7))
-  )
-)
-
-table(db_base$y)
-income_vars <- c("ingtot", "y_ingLab_m", "y_salary_m", "y_salarySec_m")
-wage_vars   <- c("y_ingLab_m_ha", "y_salary_m_hu", "y_salarySec_m_ha")
-hours_vars  <- c("totalHoursWorked", "hoursWorkUsual", "hoursWorkActualSecondJob")
-
-                 
-# Explore statistics
-base_theme <- theme_minimal(base_size = 12) +
-  theme(
-    plot.title = element_text(face = "bold", size = 13, margin = margin(b = 6)),
-    axis.title = element_text(size = 11),
-    strip.text = element_text(face = "bold"),
-    panel.grid.minor = element_blank()
-  )
-
-
-# Función general para graficar un conjunto de variables
-graficar_variables <- function(db, vars, titulo = "Distribución", bins = 30) {
-
-  db_long <- db %>%
-    dplyr::select(all_of(vars)) %>%
-    pivot_longer(cols = everything(), names_to = "variable", values_to = "valor") %>%
-    filter(is.finite(valor))
-  
-  # Histograma + densidad
- p1 <- ggplot(db_long, aes(x = valor)) +
-    geom_histogram(aes(y = after_stat(density)),
-                   bins = bins, fill = "steelblue", color = "white", alpha = 0.7) +
-    geom_density(color = "darkred", linewidth = 0.4, na.rm = TRUE) +
-    facet_wrap(~ variable, scales = "free", ncol = 2) +
-    labs(
-      title = paste(titulo, "- Histogramas y Densidad"),
-      x = "Valor", y = "Densidad"
-    ) +
-    base_theme
-  
-  # Boxplots
-  p2 <- ggplot(db_long, aes(x = variable, y = valor)) +
-    geom_boxplot(fill = "steelblue", outlier.color = "orange", width = 0.7) +
-    coord_flip() +
-    labs(
-      title = paste(titulo, "- Boxplots"),
-      x = "Variable", y = "Valor"
-    ) +
-    base_theme
-
-  list(histogramas = p1, boxplots = p2)
-}
-
-# Ingresos
-g_income <- graficar_variables(db_base, income_vars, "Ingresos")
-print(g_income$histogramas)
-print(g_income$boxplots)
-stargazer(as.data.frame(db_base[, income_vars]), type = "text")
-```
-
-```{r}
-# Salarios por hora
-g_wage <- graficar_variables(db_base, wage_vars, "Salarios por hora")
-print(g_wage$histogramas)
-print(g_wage$boxplots)
-stargazer(as.data.frame(db_base[, wage_vars]), type = "text")
-```
-
-```{r}
-# Horas trabajadas
-g_hours <- graficar_variables(db_base, hours_vars, "Horas trabajadas")
-print(g_hours$histogramas)
-print(g_hours$boxplots)
-stargazer(as.data.frame(db_base[, hours_vars]), type = "text")
-```
-
-# Characteristics of individuals and jobs
+# Contructing relevant variables 
 
 ## Creating years of education
 
@@ -310,46 +210,18 @@ rm(inconsistent_age)
 # We will impute 0 years to those 31 cases as most of them are around 21 years old
 db_base$exp <- ifelse(db_base$exp < 0, 0, db_base$exp)
 stargazer(as.data.frame(db_base[,"exp"]), type="text")
-
-# Removing oldest people
-youngs <- db_base %>%
-  filter(age <  65) %>%
-  select(age, edu_years, exp)
-stargazer(as.data.frame(youngs[,"exp"]), type="text")
-rm(youngs)
 ```
 
-## Exploring characteristics
-
+## Creating log of salary and saving
 ```{r}
-dem_vars <- c("age", "sex", "estrato1", "maxEducLevel", "college", "edu_years", "exp")
-                 
-ocu_vars <- c("oficio", "relab", "regSalud", "sizeFirm")
-
-
-g_dem <- graficar_variables(db_base, dem_vars, "Demographics")
-print(g_dem$histogramas)
-print(g_dem$boxplots)
-stargazer(as.data.frame(db_base[,dem_vars]), type="text") 
-
-```
-
-```{r}
-g_ocu <- graficar_variables(db_base, ocu_vars, "Job characteristics")
-print(g_ocu$histogramas)
-print(g_ocu$boxplots)
-stargazer(as.data.frame(db_base[,ocu_vars]), type="text") 
-```
-
-```{r}
-
+# Creation of the Log salary
 db_base <- db_base %>%
   mutate(Log_Total_hour_salary=log(db_base$y_ingLab_m_ha))
 
+# Save few variables for better workflow
 db = db_base |> select(Log_Total_hour_salary, ingtot, y_ingLab_m, y_salary_m, y_salarySec_m, y_ingLab_m_ha, y_salary_m_hu, y_salarySec_m_ha, totalHoursWorked, hoursWorkUsual, hoursWorkActualSecondJob, age, sex, estrato1, maxEducLevel, college, edu_years, exp, oficio, relab, formal, microEmpresa, regSalud, sizeFirm, p6240, ocu, dsi)
 
 write.csv(db, "db_clean1.csv")
-
 
 db <- db %>%
   mutate(across(
@@ -357,6 +229,118 @@ db <- db %>%
     ~ as.factor(.)
   ))
 
+```
+
+
+# Exploring our variables of interest
+
+First, we split our sample to explore characteristics by gender. 
+
+```{r}
+# We duplicate and split the base to explore data discriminated by gender
+db_all   <- db_base
+db_men   <- subset(db_base, sex==1)
+db_women <- subset(db_base,  sex==0)
+```
+
+## Characterizing employment
+
+```{r}
+employment_vars  <- c("formal", "microEmpresa", "sizeFirm")
+
+# Descriptive stats
+stargazer(as.data.frame(db_all[, employment_vars]), type = "text")
+stargazer(as.data.frame(db_men[, employment_vars]), type = "text")
+stargazer(as.data.frame(db_women[, employment_vars]), type = "text")
+```
+
+Overall, about 77.6% of employment is formal, while 22.4% is informal, consistent with the predominance of formality in Bogotá’s labor market. Employment is also concentrated in larger firms: only 22% of jobs are in small businesses (≤5 employees), compared to nearly 78% in firms with more than five workers. The average firm size reported is 3.9 on a scale from 1 to 5, with a relatively wide dispersion (s.d. 1.3).
+
+When disaggregating by sex, some differences emerge. Among men, 78.9% are formally employed, slightly higher than women’s 76.2%, suggesting that informality affects women somewhat more. Men are also less likely to work in small firms (18.5%) compared to women (25.5%). In line with this, the average firm size is higher for men (4.1) than for women (3.8), indicating that women’s employment is more concentrated in smaller organizations.
+
+```{r}
+# Employer type: 
+cat("Overall", table(db_all$relab))
+cat("% private (overall)", (8616/9700))
+cat("Men", table(db_men$relab))
+cat("% private (men)", (4574/4875))
+cat("Women", table(db_women$relab))
+cat("% private (women)", (4042/4825))
+```
+
+Most workers in the sample are private employees (88.9%), followed by government employees (5.7%) and domestic workers (5.5%), while agricultural day laborers are almost negligible. Among men, 93.8% are private employees, with very few in domestic work (0.4%). In contrast, women are more evenly split: 83.8% work as private employees, while a sizeable 10.6% are domestic workers, underscoring the strong gender segmentation in employment.Most workers in the sample are private employees (88.9%), followed by government employees (5.7%) and domestic workers (5.5%), while agricultural day laborers are almost negligible. Among men, 93.8% are private employees, with very few in domestic work (0.4%). In contrast, 83.8% of women work as private employees, while a sizeable 10.6% are domestic workers, underscoring the strong gender segmentation in this type of employment.
+
+## Income, wages and hours worked
+
+```{r}
+# Variables of income
+table(db_all$y)
+work_vars <- c("y_ingLab_m", "y_ingLab_m_ha", "totalHoursWorked")
+                 
+# Explore statistics
+base_theme <- theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(face = "bold", size = 13, margin = margin(b = 6)),
+    axis.title = element_text(size = 11),
+    strip.text = element_text(face = "bold"),
+    panel.grid.minor = element_blank()
+  )
+
+# Function to plot a set of variable
+plot_variables <- function(db, vars, titulo = "Distribtion", bins = 30) {
+
+  db_long <- db %>%
+    dplyr::select(all_of(vars)) %>%
+    pivot_longer(cols = everything(), names_to = "variable", values_to = "value") %>%
+    filter(is.finite(value))
+  
+  # Histogram + Density
+ p1 <- ggplot(db_long, aes(x = value)) +
+    geom_histogram(aes(y = after_stat(density)),
+                   bins = bins, fill = "steelblue", color = "white", alpha = 0.7) +
+    geom_density(color = "darkred", linewidth = 0.4, na.rm = TRUE) +
+    facet_wrap(~ variable, scales = "free", ncol = 2) +
+    labs(
+      title = paste(titulo, "- Histograms and Density"),
+      x = "Value", y = "Density"
+    ) +
+    base_theme
+  
+  # Boxplots
+  p2 <- ggplot(db_long, aes(x = variable, y = value)) +
+    geom_boxplot(fill = "steelblue", outlier.color = "orange", width = 0.7) +
+    coord_flip() +
+    labs(
+      title = paste(titulo, "- Boxplots"),
+      x = "Variable", y = "Value"
+    ) +
+    base_theme
+
+  list(histogramas = p1, boxplots = p2)
+}
+
+# Work characteristics
+g_work <- plot_variables(db_all, work_vars, "Work variables")
+print(g_work$histogramas)
+print(g_work$boxplots)
+stargazer(as.data.frame(db_all[, work_vars]), type = "text")
+stargazer(as.data.frame(db_men[, work_vars]), type = "text")
+stargazer(as.data.frame(db_women[, work_vars]), type = "text")
+```
+
+# Characteristics of individuals
+
+## Exploring characteristics
+
+```{r}
+dem_vars <- c("age" ,"exp", "estrato1", "maxEducLevel", "edu_years")
+                 
+g_dem <- plot_variables(db_all, dem_vars, "Demographics")
+print(g_dem$histogramas)
+print(g_dem$boxplots)
+stargazer(as.data.frame(db_all[,dem_vars]), type="text") 
+stargazer(as.data.frame(db_men[,dem_vars]), type="text") 
+stargazer(as.data.frame(db_women[,dem_vars]), type="text") 
 ```
 
 ## 3. Age-wage profile
