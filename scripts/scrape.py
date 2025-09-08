@@ -89,7 +89,7 @@ import random
 
 # Parámetros
 BASE_URL = "https://ignaciomsarmiento.github.io/GEIH2018_sample/page{n}.html"
-DATA_DIR = Path("../data")
+DATA_DIR = Path("../data/raw")
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 XPATH_TABLE = '/html/body/div/div/div[2]/div/table'
