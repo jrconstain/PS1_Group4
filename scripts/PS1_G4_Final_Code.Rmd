@@ -219,7 +219,7 @@ db_base <- db_base %>%
   mutate(Log_Total_hour_salary=log(db_base$y_ingLab_m_ha))
 
 # Save few variables for better workflow
-db = db_base |> select(Log_Total_hour_salary, ingtot, y_ingLab_m, y_salary_m, y_salarySec_m, y_ingLab_m_ha, y_salary_m_hu, y_salarySec_m_ha, totalHoursWorked, hoursWorkUsual, hoursWorkActualSecondJob, age, sex, estrato1, maxEducLevel, college, edu_years, exp, oficio, relab, formal, microEmpresa, regSalud, sizeFirm, p6240, ocu, dsi)
+db = db_base |> select(Log_Total_hour_salary, ingtot, y_ingLab_m, y_salary_m, y_salarySec_m, y_ingLab_m_ha, totalHoursWorked, hoursWorkUsual, hoursWorkActualSecondJob, age, sex, estrato1, maxEducLevel, college, edu_years, exp, oficio, relab, formal, microEmpresa, regSalud, sizeFirm, p6240, ocu, dsi)
 
 write.csv(db, "db_clean1.csv")
 
@@ -1096,7 +1096,7 @@ form_B2 <- Log_Total_hour_salary ~ bin_female + edu_years + age + age2 + formal 
 
 ```{r}
 #Nuevo modelo con variable proxy de experiencia en lugar de años de educación
-form_M1 <- Log_Total_hour_salary ~ bin_female + age + age2 + maxEducLevel + exp + exp2+ formal + sizeFirm + relab + oficio
+form_A1 <- Log_Total_hour_salary ~ bin_female + age + age2 + maxEducLevel + exp + exp2+ formal + sizeFirm + relab + oficio
 
 #Una mejora de nuestro modelo, incluyendole poly a age y estrato
 form_A2 <- Log_Total_hour_salary ~ bin_female + edu_years + poly(age, 4, raw=TRUE) + formal + sizeFirm + relab + oficio + estrato1
@@ -1217,9 +1217,9 @@ df_errores <- data.frame(error = test$error)
 # Gráfico de distribución
 ggplot(df_errores, aes(x = error)) +
   geom_histogram(bins = 30, fill = "grey", color = "black", alpha = 0.7) +
-  geom_vline(xintercept = Mean_errorsM2VS, color = "black", linetype = "dashed", size = 1) +
-  geom_vline(xintercept = Mean_errorsM2VS + 2 * sd_errorsM2VS, color = "darkblue", linetype = "dashed", size = 1) +
-  geom_vline(xintercept = Mean_errorsM2VS - 2 * sd_errorsM2VS, color = "darkblue", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = Mean_errorsA2VS, color = "black", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = Mean_errorsA2VS + 2 * sd_errorsA2VS, color = "darkblue", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = Mean_errorsA2VS - 2 * sd_errorsA2VS, color = "darkblue", linetype = "dashed", size = 1) +
   labs(title = "Distribución del error de predicción",
        x = "Prediction Error",
        y = "-") +
